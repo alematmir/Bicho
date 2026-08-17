@@ -75,6 +75,11 @@ Deno.serve(async (req) => {
     return fail("No pudimos iniciar el pago. Probá de nuevo.", 500);
   }
 
+  // Mientras no cobremos comisión esto da 0 — ver docs/backlog.md. El cálculo
+  // real queda desde ahora para no tener que reconectar a nadie el día que se
+  // active: commission() ya está testeada en packages/shared.
+  const feeCents = commission(order.total_cents, business.commission_bps);
+
   const preferenceBody = {
     items: items.map((i) => ({
       title: i.name_snapshot,
@@ -90,10 +95,12 @@ Deno.serve(async (req) => {
       failure: `${SHOP_BASE_URL}/${business.slug}`,
     },
     auto_return: "approved",
-    // 0 mientras no cobremos comisión — ver docs/backlog.md. Queda el cálculo
-    // real desde ahora para no tener que reconectar a nadie el día que se
-    // active: commission() ya está testeada en packages/shared.
-    marketplace_fee: toUnits(commission(order.total_cents, business.commission_bps)),
+    // marketplace_fee SOLO si hay comisión de verdad. Mandarlo en 0 no es
+    // inocuo: MP lo acepta únicamente si la aplicación está registrada como
+    // marketplace, y si no lo está, el checkout deshabilita el botón de pagar
+    // sin decir por qué — el comprador ve el pago muerto y nadie se entera de
+    // la causa. Nos costó una tarde entera de debug.
+    ...(feeCents > 0 ? { marketplace_fee: toUnits(feeCents) } : {}),
   };
 
   const mpRes = await fetch("https://api.mercadopago.com/checkout/preferences", {
