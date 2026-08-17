@@ -125,6 +125,12 @@ de apertura lo resuelve.
 Cosas que fuiste tirando en la marcha. Anotadas tal cual, sin diseño ni
 alcance definido — eso se hace cuando se retomen, no antes.
 
+- **Volver a IDLE (saludo completo) después de un pedido terminado**, en vez de
+  solo reenviar el link. Hoy, tras un pedido CANCELLED/DELIVERED, "Hola" limpia
+  `activeOrderId` y reenvía el link de la tienda (arreglado — antes quedaba
+  repitiendo el estado del pedido viejo para siempre), pero no resetea a un
+  saludo con botones de cero. Funciona, no es la experiencia ideal.
+
 - **Recordar la dirección del cliente** entre pedidos, para no tener que
   tipearla cada vez. El esquema ya tiene la tabla `addresses` (customer_id,
   street, number, floor_apt, notes, is_default) pensada para esto — hoy el

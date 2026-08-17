@@ -297,6 +297,19 @@ async function handleIncoming(req: Request): Promise<Response> {
       const state: ConversationState = existingConv?.state ?? "IDLE";
       const context: ConversationContext = existingConv?.context ?? { failedAttempts: 0 };
 
+      // Un pedido en estado terminal (entregado o cancelado) deja de ser "el
+      // pedido activo": si no, la máquina queda repitiendo su estado para
+      // siempre y nunca vuelve a ofrecer arrancar uno nuevo. La máquina en sí
+      // (decide()) no consulta la base — este chequeo vive acá, del lado de
+      // quien sí puede.
+      if (context.activeOrderId) {
+        const { data: activeOrder } = await supabaseAdmin
+          .from("orders").select("status").eq("id", context.activeOrderId).maybeSingle();
+        if (!activeOrder || activeOrder.status === "DELIVERED" || activeOrder.status === "CANCELLED") {
+          delete context.activeOrderId;
+        }
+      }
+
       const env: ConversationEnv = {
         branchCount: await countActiveBranches(business.businessId),
         allowsInquiry: true, // sin setting propio todavía; ver docs/TODO.md
