@@ -91,11 +91,18 @@ Deno.serve(async (req) => {
   const tokens = tokenData as TokenResponse;
 
   // --- Guardar los tokens cifrados, nunca en texto plano en una tabla normal -
+  // El nombre lleva un sufijo único: Vault no permite dos secretos con el
+  // mismo `name`, y un nombre fijo por comercio chocaba apenas alguien
+  // desconectaba y volvía a conectar (desconectar no borra el secreto viejo,
+  // solo marca la fila como disconnected). Nosotros siempre referenciamos por
+  // id, nunca por name — el nombre es solo para que se entienda algo mirando
+  // Vault a mano, así que la unicidad no le hace falta a nadie más.
+  const suffix = crypto.randomUUID().slice(0, 8);
   const { data: accessRef, error: accessErr } = await supabaseAdmin.rpc("vault_store_secret", {
-    p_secret: tokens.access_token, p_name: `mp_access_${business_id}`,
+    p_secret: tokens.access_token, p_name: `mp_access_${business_id}_${suffix}`,
   });
   const { data: refreshRef, error: refreshErr } = await supabaseAdmin.rpc("vault_store_secret", {
-    p_secret: tokens.refresh_token, p_name: `mp_refresh_${business_id}`,
+    p_secret: tokens.refresh_token, p_name: `mp_refresh_${business_id}_${suffix}`,
   });
   if (accessErr || refreshErr) {
     console.error("Vault falló:", accessErr, refreshErr);
