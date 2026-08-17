@@ -18,7 +18,12 @@ export function MercadoPagoCallback() {
     const mpError = params.get('error');
 
     if (mpError) {
-      setError('Mercado Pago canceló la conexión.');
+      // El motivo real viene en error_description y antes lo tirábamos,
+      // reemplazándolo por un genérico. Es el dato que dice si el problema es
+      // el redirect_uri, el client_id o que el usuario canceló — sin él, cada
+      // fallo de conexión es indistinguible del anterior.
+      const detail = params.get('error_description');
+      setError(detail ? `Mercado Pago rechazó la conexión: ${detail} (${mpError})` : `Mercado Pago rechazó la conexión: ${mpError}`);
       return;
     }
     if (!code || !businessId) {
