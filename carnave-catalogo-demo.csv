@@ -1,0 +1,8 @@
+categoria,nombre,descripcion,precio,disponible
+Hamburguesas,Clásica,"Medallón 150g, cheddar, lechuga, tomate, cebolla morada, salsa de la casa",8500,si
+Hamburguesas,Doble,"Dos medallones 150g, doble cheddar, panceta, cebolla caramelizada",12500,si
+Hamburguesas,Veggie,"Medallón de garbanzos y quinoa, palta, brotes, alioli",9000,si
+Bebidas,Coca-Cola 500ml,,2000,si
+Bebidas,Agua mineral 500ml,,1500,si
+Bebidas,Limonada,"Con menta y jengibre",2500,si
+Postres,Brownie con helado,,4500,si

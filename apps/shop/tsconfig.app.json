@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "allowArbitraryExtensions": true,
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* El alias de vite.config.ts solo lo resuelve el bundler; tsc necesita el
+       suyo propio, si no, "tsc -b" (el que corre el build) no tipa @bicho/shared.
+       Sin baseUrl: en TS7 con moduleResolution "bundler" las rutas de "paths"
+       ya se resuelven relativas al tsconfig, y baseUrl está deprecado. */
+    "paths": {
+      "@bicho/shared": ["../../packages/shared/src/index.ts"]
+    },
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

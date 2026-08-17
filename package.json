@@ -1,0 +1,22 @@
+{
+  "name": "bicho",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "node scripts/verify-remote.mjs",
+    "dev:shop": "npm run dev --workspace=shop",
+    "dev:dashboard": "npm run dev --workspace=dashboard"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.5",
+    "supabase": "^2.114.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}
