@@ -12,6 +12,13 @@ export type Membership = {
 
 type BusinessContextValue = {
   loading: boolean;
+  /**
+   * Distinto de `memberships: []`. Sin esto, una consulta que falla (sesión
+   * vencida, red caída) era indistinguible de un usuario que todavía no tiene
+   * comercios, y el dashboard le ofrecía crear uno — invitando a duplicar el
+   * que ya tenía.
+   */
+  error: string | null;
   memberships: Membership[];
   /** El comercio activo en el dashboard. Con uno solo, se elige automático. */
   current: Membership | null;
@@ -26,15 +33,18 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchMemberships() {
     if (!session) {
       setMemberships([]);
+      setError(null);
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setError(null);
     const { data, error } = await supabase
       .from('business_users')
       .select('business_id, role, businesses(slug, name, logo_url)')
@@ -42,7 +52,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       console.error('No se pudieron cargar los comercios del usuario:', error);
-      setMemberships([]);
+      setError(error.message ?? 'No pudimos cargar tus comercios.');
       setLoading(false);
       return;
     }
@@ -68,7 +78,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
   return (
     <BusinessContext.Provider
-      value={{ loading, memberships, current, setCurrent: setCurrentId, refetch: fetchMemberships }}
+      value={{ loading, error, memberships, current, setCurrent: setCurrentId, refetch: fetchMemberships }}
     >
       {children}
     </BusinessContext.Provider>

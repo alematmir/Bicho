@@ -50,10 +50,41 @@ function RequireAuth() {
   );
 }
 
-/** Logueado pero sin ningún comercio propio: onboarding en vez del dashboard. */
+/**
+ * Logueado pero sin ningún comercio propio: onboarding en vez del dashboard.
+ *
+ * El onboarding es SOLO para quien de verdad no tiene comercios. Si la
+ * consulta falló no sabemos si tiene o no, y ofrecerle crear uno lo empuja a
+ * duplicar el que ya existe — así que ahí se muestra el error, no el alta.
+ */
 function RequireBusiness() {
-  const { loading, current } = useBusiness();
+  const { loading, error, current, refetch } = useBusiness();
+  const { signOut } = useAuth();
+
   if (loading) return <CenteredMessage>Cargando...</CenteredMessage>;
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="font-medium text-neutral-800">No pudimos cargar tus comercios.</p>
+        <p className="max-w-sm text-sm text-neutral-500">
+          Puede que tu sesión haya vencido. Probá de nuevo, y si sigue igual volvé a entrar.
+        </p>
+        <div className="mt-2 flex gap-3">
+          <button
+            onClick={() => refetch()}
+            className="rounded-full bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:opacity-90"
+          >
+            Reintentar
+          </button>
+          <button onClick={() => signOut()} className="text-sm text-neutral-500 underline">
+            Volver a entrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!current) return <Onboarding />;
   return <Outlet />;
 }
