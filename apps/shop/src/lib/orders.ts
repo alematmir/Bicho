@@ -19,6 +19,7 @@ export type CreateOrderInput = {
   items: { product_id: string; variant_id?: string; qty: number; option_ids: string[] }[];
   customer_notes?: string;
   session_token?: string;
+  payment_method: 'mercadopago' | 'cash' | 'transfer';
 };
 
 export type CreateOrderResult = {

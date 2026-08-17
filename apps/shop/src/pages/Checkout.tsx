@@ -6,8 +6,10 @@ import type { Branch, Business } from '../lib/types';
 import { CartProvider, useCart } from '../state/cart';
 import { Money } from '../components/Money';
 import { createOrder, CreateOrderError } from '../lib/orders';
+import { createMpPreference, CreatePreferenceError } from '../lib/mercadopago';
 
 type FulfillmentType = 'delivery' | 'pickup';
+type PaymentMethod = 'mercadopago' | 'cash' | 'transfer';
 
 export function Checkout() {
   const { slug } = useParams<{ slug: string }>();
@@ -41,6 +43,7 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
   const [fulfillment, setFulfillment] = useState<FulfillmentType>(
     branch.accepts_delivery ? 'delivery' : 'pickup',
   );
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mercadopago');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [street, setStreet] = useState('');
@@ -99,7 +102,19 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
           option_ids: l.options.map((o) => o.id),
         })),
         customer_notes: customerNotes.trim() || undefined,
+        payment_method: paymentMethod,
       });
+
+      // El pedido ya está creado y confirmado en los tres casos — lo que
+      // cambia es qué sigue. Con Mercado Pago no hay "pantalla de gracias"
+      // todavía: se va derecho a pagar, y el checkout de MP vuelve acá solo
+      // (back_urls, configurado en create-mp-preference) una vez que termine.
+      if (paymentMethod === 'mercadopago') {
+        const checkoutUrl = await createMpPreference(order.id);
+        clear();
+        window.location.href = checkoutUrl;
+        return;
+      }
 
       clear();
       navigate(`/${business.slug}/order/${order.number}`, {
@@ -107,7 +122,7 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
       });
     } catch (err) {
       setFormError(
-        err instanceof CreateOrderError
+        err instanceof CreateOrderError || err instanceof CreatePreferenceError
           ? err.message
           : 'No pudimos confirmar el pedido. Probá de nuevo en un momento.',
       );
@@ -181,6 +196,30 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
         </section>
 
         <section>
+          <h2 className="mb-2 text-sm font-semibold text-neutral-700">Cómo pagás</h2>
+          <div className="space-y-2">
+            <PaymentOption
+              active={paymentMethod === 'mercadopago'}
+              onClick={() => setPaymentMethod('mercadopago')}
+              title="Mercado Pago"
+              subtitle="Tarjeta, dinero en cuenta, o transferencia dentro de MP"
+            />
+            <PaymentOption
+              active={paymentMethod === 'cash'}
+              onClick={() => setPaymentMethod('cash')}
+              title="Efectivo"
+              subtitle={fulfillment === 'delivery' ? 'Pagás al recibir el pedido' : 'Pagás al retirar'}
+            />
+            <PaymentOption
+              active={paymentMethod === 'transfer'}
+              onClick={() => setPaymentMethod('transfer')}
+              title="Transferencia bancaria"
+              subtitle="Te pasamos los datos por WhatsApp para mandar el comprobante"
+            />
+          </div>
+        </section>
+
+        <section>
           <Input
             label="Algo más que debamos saber (opcional)"
             value={customerNotes}
@@ -206,7 +245,11 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
           disabled={submitting}
           className="w-full rounded-full bg-neutral-900 py-3.5 font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
         >
-          {submitting ? 'Confirmando...' : `Confirmar pedido · ${(total / 100).toLocaleString('es-AR')}`}
+          {submitting
+            ? paymentMethod === 'mercadopago' ? 'Yendo a Mercado Pago...' : 'Confirmando...'
+            : paymentMethod === 'mercadopago'
+              ? 'Ir a pagar'
+              : `Confirmar pedido · ${(total / 100).toLocaleString('es-AR')}`}
         </button>
       </form>
     </div>
@@ -233,6 +276,38 @@ function FulfillmentButton({
       }`}
     >
       {children}
+    </button>
+  );
+}
+
+function PaymentOption({
+  active,
+  onClick,
+  title,
+  subtitle,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
+        active ? 'border-neutral-900 bg-neutral-900/5' : 'border-neutral-200 hover:border-neutral-300'
+      }`}
+    >
+      <span
+        className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 ${
+          active ? 'border-neutral-900 bg-neutral-900' : 'border-neutral-300'
+        }`}
+      />
+      <span>
+        <span className="block text-sm font-medium text-neutral-900">{title}</span>
+        <span className="block text-xs text-neutral-500">{subtitle}</span>
+      </span>
     </button>
   );
 }

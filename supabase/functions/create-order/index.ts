@@ -22,6 +22,8 @@ const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
 );
 
+type PaymentMethod = "mercadopago" | "cash" | "transfer";
+
 type Input = {
   business_slug: string;
   branch_id: string;
@@ -30,6 +32,7 @@ type Input = {
   delivery_address?: { street: string; number: string; floor_apt?: string; notes?: string };
   items: { product_id: string; variant_id?: string; qty: number; option_ids: string[] }[];
   customer_notes?: string;
+  payment_method: PaymentMethod;
 };
 
 // A esta función la llama el navegador de la tienda, no un servidor de
@@ -68,6 +71,9 @@ Deno.serve(async (req) => {
   if (!Array.isArray(input.items) || input.items.length === 0) return fail("El carrito está vacío");
   if (!["delivery", "pickup"].includes(input.fulfillment_type)) {
     return fail("Tipo de entrega inválido");
+  }
+  if (!["mercadopago", "cash", "transfer"].includes(input.payment_method)) {
+    return fail("Elegí un método de pago");
   }
   for (const item of input.items) {
     if (!item.product_id || !Number.isInteger(item.qty) || item.qty <= 0) {
@@ -253,6 +259,7 @@ Deno.serve(async (req) => {
     p_subtotal_cents: subtotal_cents,
     p_delivery_fee_cents: delivery_fee_cents,
     p_total_cents: total_cents,
+    p_payment_method: input.payment_method,
   });
 
   if (error) {
