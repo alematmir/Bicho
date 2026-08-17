@@ -7,6 +7,10 @@ export type MpAccount = {
   mp_user_id: string | null;
   expires_at: string | null;
   last_error: string | null;
+  // null en conexiones hechas antes de que guardáramos estos datos — ver
+  // 20260817000500_mp_account_identity.sql.
+  live_mode: boolean | null;
+  nickname: string | null;
 };
 
 export function mercadoPagoCallbackUrl(): string {
@@ -33,7 +37,7 @@ export function mercadoPagoAuthorizationUrl(businessId: string): string {
 export async function fetchMpAccount(businessId: string): Promise<MpAccount | null> {
   const { data, error } = await supabase
     .from('mp_accounts')
-    .select('status, mp_user_id, expires_at, last_error')
+    .select('status, mp_user_id, expires_at, last_error, live_mode, nickname')
     .eq('business_id', businessId)
     .maybeSingle();
   if (error) throw error;

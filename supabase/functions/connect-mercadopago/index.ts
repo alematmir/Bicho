@@ -109,11 +109,23 @@ Deno.serve(async (req) => {
     return fail("No pudimos guardar la conexión de forma segura. Probá de nuevo.", 500);
   }
 
+  // El nickname es cosmético: sirve para que el dueño reconozca de un vistazo
+  // qué cuenta conectó. Si la llamada falla no abortamos la conexión por eso —
+  // el dato que de verdad importa (live_mode) ya vino con los tokens.
+  const nickname = await fetch("https://api.mercadopago.com/users/me", {
+    headers: { Authorization: `Bearer ${tokens.access_token}` },
+  })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((u) => u?.nickname ?? null)
+    .catch(() => null);
+
   const { error: upsertErr } = await supabaseAdmin.from("mp_accounts").upsert(
     {
       business_id,
       mp_user_id: String(tokens.user_id),
       public_key: tokens.public_key,
+      live_mode: tokens.live_mode,
+      nickname,
       access_token_ref: accessRef,
       refresh_token_ref: refreshRef,
       expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
