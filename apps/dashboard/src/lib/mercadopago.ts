@@ -40,6 +40,14 @@ export async function fetchMpAccount(businessId: string): Promise<MpAccount | nu
   return data;
 }
 
+export async function disconnectMercadoPago(businessId: string): Promise<void> {
+  const { error } = await supabase
+    .from('mp_accounts')
+    .update({ status: 'disconnected' })
+    .eq('business_id', businessId);
+  if (error) throw error;
+}
+
 export class ConnectMercadoPagoError extends Error {}
 
 export async function completeMercadoPagoConnection(businessId: string, code: string): Promise<void> {

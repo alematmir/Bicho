@@ -1,19 +1,25 @@
 import { useEffect, useState } from 'react';
 import { useBusiness } from '../state/business';
-import { fetchMpAccount, mercadoPagoAuthorizationUrl, type MpAccount } from '../lib/mercadopago';
+import {
+  disconnectMercadoPago, fetchMpAccount, mercadoPagoAuthorizationUrl, type MpAccount,
+} from '../lib/mercadopago';
 
 export function MercadoPago() {
   const { current } = useBusiness();
   const [account, setAccount] = useState<MpAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
-  useEffect(() => {
+  function load() {
     if (!current) return;
+    setLoading(true);
     fetchMpAccount(current.business_id)
       .then(setAccount)
       .finally(() => setLoading(false));
-  }, [current?.business_id]);
+  }
+
+  useEffect(load, [current?.business_id]);
 
   function handleConnect() {
     if (!current) return;
@@ -21,6 +27,19 @@ export function MercadoPago() {
       window.location.href = mercadoPagoAuthorizationUrl(current.business_id);
     } catch (err) {
       setError((err as Error).message);
+    }
+  }
+
+  async function handleDisconnect() {
+    if (!current) return;
+    setDisconnecting(true);
+    try {
+      await disconnectMercadoPago(current.business_id);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -41,6 +60,14 @@ export function MercadoPago() {
           <p className="mt-2 text-sm text-neutral-600">
             Los pagos de este comercio van directo a tu cuenta de Mercado Pago.
           </p>
+          {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+          <button
+            onClick={handleDisconnect}
+            disabled={disconnecting}
+            className="mt-4 text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
+          >
+            {disconnecting ? 'Desconectando...' : 'Desconectar'}
+          </button>
         </div>
       ) : (
         <div className="mt-6 max-w-md">
