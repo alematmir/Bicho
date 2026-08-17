@@ -36,10 +36,10 @@ En orden. Lo primero es lo que hace falta para ver algo funcionando.
 
 ## Pagos
 
-- [ ] Crear app de Mercado Pago con OAuth *(vos)*
-- [ ] Conectar cuenta del comercio (OAuth + callback)
-- [ ] Crear preferencia de pago
-- [ ] Webhook de pago: firma, idempotencia, verificación del monto
+- [x] Crear app de Mercado Pago con OAuth *(vos)*
+- [x] Conectar cuenta del comercio (OAuth + callback, tokens en Vault)
+- [ ] Crear preferencia de pago (Checkout Pro) desde el checkout de la tienda
+- [ ] Webhook de pago: firma, idempotencia, verificación del monto contra la API
 - [ ] Descuento de stock al confirmarse el pago
 - [ ] Efectivo
 - [ ] Transferencia: comprobante y verificación de un tap
