@@ -7,7 +7,8 @@
 //   - POST api.mercadopago.com/checkout/preferences
 //   - Con el access_token DEL VENDEDOR (el que guardamos en Vault al conectar),
 //     no el nuestro — es su cuenta la que cobra, nunca pasa por la plataforma.
-//   - Devuelve { id, init_point, sandbox_init_point }.
+//   - Devuelve { id, init_point, sandbox_init_point }; nosotros solo pasamos
+//     init_point (ver el comentario del return).
 // =============================================================================
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -107,8 +108,8 @@ Deno.serve(async (req) => {
     return fail("Mercado Pago no pudo iniciar el pago. Probá de nuevo.", 500);
   }
 
-  return Response.json(
-    { init_point: mpData.init_point, sandbox_init_point: mpData.sandbox_init_point },
-    { headers: CORS_HEADERS },
-  );
+  // Solo init_point. La respuesta de MP también trae sandbox_init_point, pero
+  // viene siempre (también con cuenta real) y apunta fijo al sandbox: no lo
+  // exponemos para que la tienda no pueda elegirlo por error.
+  return Response.json({ init_point: mpData.init_point }, { headers: CORS_HEADERS });
 });
