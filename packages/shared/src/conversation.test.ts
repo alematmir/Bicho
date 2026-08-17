@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUTTON_ASK_QUESTION, BUTTON_ORDER_NOW, CONVERSATION_STATES, decide,
-  looksLikeOrderIntent, MAX_FAILED_ATTEMPTS,
+  looksLikeGreeting, looksLikeOrderIntent, MAX_FAILED_ATTEMPTS,
   type Action, type ConversationContext, type ConversationEnv, type ConversationState,
 } from './conversation';
 
@@ -119,6 +119,57 @@ describe('escalar a un humano', () => {
     }
     const ultimo = decide('AWAITING_ACTION', context, { kind: 'text', body: 'xx' }, env());
     expect(ultimo.nextState).toBe('HUMAN');
+  });
+});
+
+describe('un saludo nunca escala, en ningún estado', () => {
+  // Caso real encontrado probando: cancelar un pedido y escribir "hola" para
+  // arrancar de nuevo terminaba escalando a un humano al segundo intento,
+  // porque un saludo se trataba exactamente igual que texto sin sentido.
+
+  it('en AWAITING_ACTION, "hola" repetido nunca gasta intentos', () => {
+    let context = ctx();
+    for (let i = 0; i < MAX_FAILED_ATTEMPTS + 5; i++) {
+      const d = decide('AWAITING_ACTION', context, { kind: 'text', body: 'hola' }, env());
+      expect(d.nextState, `intento ${i}`).toBe('AWAITING_ACTION');
+      expect(d.nextContext.failedAttempts).toBe(0);
+      context = d.nextContext;
+    }
+  });
+
+  it('en AWAITING_BRANCH, "hola" repetido nunca gasta intentos', () => {
+    let context = ctx();
+    for (let i = 0; i < MAX_FAILED_ATTEMPTS + 5; i++) {
+      const d = decide('AWAITING_BRANCH', context, { kind: 'text', body: 'hola' }, env({ branchCount: 3 }));
+      expect(d.nextState, `intento ${i}`).toBe('AWAITING_BRANCH');
+      expect(d.nextContext.failedAttempts).toBe(0);
+      context = d.nextContext;
+    }
+  });
+
+  it('en LINK_SENT sin pedido activo, "hola" repetido nunca gasta intentos ni escala', () => {
+    let context = ctx();
+    for (let i = 0; i < MAX_FAILED_ATTEMPTS + 5; i++) {
+      const d = decide('LINK_SENT', context, { kind: 'text', body: 'hola' }, env());
+      expect(d.nextState, `intento ${i}`).toBe('LINK_SENT');
+      expect(d.nextContext.failedAttempts).toBe(0);
+      expect(d.actions).toEqual([{ type: 'send_shop_link', reuseSession: false }]);
+      context = d.nextContext;
+    }
+  });
+
+  it('reconoce variantes comunes de saludo', () => {
+    for (const t of ['hola', 'Hola', 'HOLA', 'holaa', 'buenas', 'buenos días',
+                      'buenas tardes', 'buenas noches', 'hey', 'ey', 'hi', 'holis']) {
+      const d = decide('AWAITING_ACTION', ctx({ failedAttempts: 1 }), { kind: 'text', body: t }, env());
+      expect(d.nextContext.failedAttempts, t).toBe(0);
+    }
+  });
+
+  it('un texto que de verdad no se entiende sigue escalando igual', () => {
+    const d = decide('LINK_SENT', ctx({ failedAttempts: 1 }),
+      { kind: 'text', body: 'asdkjhasdkjh' }, env());
+    expect(d.nextState).toBe('HUMAN');
   });
 });
 
@@ -281,6 +332,21 @@ describe('looksLikeOrderIntent', () => {
   it('no confunde una consulta con una intención de pedir', () => {
     for (const t of ['tienen sin gluten?', 'hasta que hora abren', 'donde quedan']) {
       expect(looksLikeOrderIntent(t), t).toBe(false);
+    }
+  });
+});
+
+describe('looksLikeGreeting', () => {
+  it('reconoce saludos comunes, con o sin mayúsculas/tildes', () => {
+    for (const t of ['hola', 'Hola', 'HOLA', 'holaa', 'holis', 'buenas',
+                      'buenos días', 'buenas tardes', 'buenas noches', 'hey', 'ey', 'hi']) {
+      expect(looksLikeGreeting(t), t).toBe(true);
+    }
+  });
+
+  it('no confunde texto sin sentido con un saludo', () => {
+    for (const t of ['asdkjh', 'tienen sin gluten?', '', 'quiero pedir']) {
+      expect(looksLikeGreeting(t), t).toBe(false);
     }
   });
 });

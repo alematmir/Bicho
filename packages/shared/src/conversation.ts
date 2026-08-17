@@ -164,6 +164,20 @@ export function looksLikeOrderIntent(text: string): boolean {
   return ORDER_INTENT.test(normalize(text));
 }
 
+/**
+ * Reconoce un saludo suelto — "hola", "buenas", "hey". Existe para un caso
+ * real y no un capricho: sin esto, alguien que dice "hola" de nuevo para
+ * retomar (perdió el hilo, se distrajo, lo que sea) contaba como un intento
+ * fallido más, y a la segunda vez lo mandábamos a un humano sin que hubiera
+ * pasado nada raro. Un saludo siempre se entiende — nunca debería gastar
+ * intentos ni, mucho menos, escalar.
+ */
+const GREETING = /^(hola+|holis|buen[oa]s?( ?d[ií]as?| ?tardes?| ?noches?)?|hey|ey|hi)\b/;
+
+export function looksLikeGreeting(text: string): boolean {
+  return GREETING.test(normalize(text));
+}
+
 const EMPTY_CONTEXT: ConversationContext = { failedAttempts: 0 };
 
 /** Pasa a humano, avisa al dueño y limpia el contador. */
@@ -276,6 +290,16 @@ export function decide(
         return startOrder(context, env);
       }
 
+      // Un saludo de vuelta ("hola" otra vez) no es confusión: se entiende
+      // perfecto. Se reenvía la bienvenida sin gastar intentos.
+      if (event.kind === 'text' && looksLikeGreeting(event.body)) {
+        return {
+          nextState: 'AWAITING_ACTION',
+          nextContext: { ...context, failedAttempts: 0 },
+          actions: [{ type: 'send_welcome' }],
+        };
+      }
+
       return retryOrHandoff(context, 'AWAITING_ACTION', { type: 'send_welcome' });
     }
 
@@ -291,6 +315,14 @@ export function decide(
               reuseSession: false,
             },
           ],
+        };
+      }
+
+      if (event.kind === 'text' && looksLikeGreeting(event.body)) {
+        return {
+          nextState: 'AWAITING_BRANCH',
+          nextContext: { ...context, failedAttempts: 0 },
+          actions: [{ type: 'send_branch_list' }],
         };
       }
 
@@ -310,8 +342,13 @@ export function decide(
 
       // Sin pedido todavía: se le reenvía el link. Si la sesión sigue viva se
       // reusa, para no perderle el carrito que ya venía armando.
-      const failedAttempts = context.failedAttempts + 1;
-      if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      //
+      // Un saludo no cuenta como intento fallido — es el caso real que
+      // encontramos probando: cancelar un pedido y escribir "hola" para
+      // arrancar de nuevo no debería sumar hacia escalar a un humano.
+      const isGreeting = event.kind === 'text' && looksLikeGreeting(event.body);
+      const failedAttempts = isGreeting ? 0 : context.failedAttempts + 1;
+      if (!isGreeting && failedAttempts >= MAX_FAILED_ATTEMPTS) {
         return handoff(context, 'not_understood');
       }
 
