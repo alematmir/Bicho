@@ -28,5 +28,11 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Los .test.ts nunca van al build de producción. Localmente "andaba" porque
+  // vitest queda accesible igual (está en la raíz del monorepo, hoisted); en
+  // Vercel, que solo instala esta app, tsc los intenta compilar igual y
+  // truena buscando 'vitest'. Vitest corre estos archivos con su propio
+  // pipeline (esbuild), nunca depende de que "tsc -b" los incluya.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
