@@ -182,6 +182,23 @@ precios, capturas) y no conviene redesplegar el dashboard por cambiar un título
 - `SHOP_BASE_URL` (secret de Supabase) y `VITE_SHOP_BASE_URL` ya apuntan a
   `pedi.bicho.com.ar`; el `site_url` de Auth a `app.bicho.com.ar`.
 
+**Panel de la plataforma (18/8/2026):** `admin.bicho.com.ar` → proyecto
+`bicho-admin` en Vercel, detrás de Cloudflare Access con una policy que solo
+permite el mail del dueño. Verificado: un visitante sin sesión recibe 302 hacia
+la pantalla de Cloudflare y nunca ve el HTML.
+
+Ese registro DNS es el ÚNICO en nube naranja. Access solo puede revisar el
+tráfico que pasa por el proxy de Cloudflare; con la nube gris la aplicación
+quedaría creada y sin efecto, en silencio. `app` y `pedi` siguen en gris porque
+no tienen Access delante y el proxy solo les agregaría un segundo CDN.
+
+**Revisar a fines de octubre de 2026:** Vercel marca ese dominio como "Invalid
+Configuration" porque el DNS apunta a Cloudflare y no a su IP. Es cosmético — el
+certificado de Let's Encrypt se emitió igual, ya con el proxy activo, y vence el
+16/11/2026. Pero conviene confirmar que se renueva solo: si no lo hiciera, con
+SSL/TLS en Full (strict) Cloudflare devolvería 526 y el panel se caería sin
+aviso previo. La salida rápida sería pasar el modo a Full a secas.
+
 Lo que queda de esto:
 - `bicho.com.ar` (la raíz) no está asignada a ningún proyecto: espera la landing.
 - **Agregar `https://app.bicho.com.ar/oauth/mercadopago/callback` a las redirect
