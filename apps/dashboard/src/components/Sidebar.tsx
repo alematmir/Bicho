@@ -20,7 +20,7 @@ const LIVE_LINKS = [
 const PLANNED_LINKS = ['Clientes', 'Sucursales'];
 
 export function Sidebar() {
-  const { current, memberships, setCurrent } = useBusiness();
+  const { current, memberships, isAdmin, setCurrent } = useBusiness();
   const { signOut } = useAuth();
   const isOwner = current?.role === 'owner';
 
@@ -64,6 +64,21 @@ export function Sidebar() {
             {link.label}
           </NavLink>
         ))}
+
+        {isAdmin && (
+          <div className="mt-2 border-t border-neutral-100 pt-2">
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `block rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive ? 'bg-brand-50 text-brand-700' : 'text-neutral-700 hover:bg-neutral-100'
+                }`
+              }
+            >
+              Comercios
+            </NavLink>
+          </div>
+        )}
 
         <div className="mt-2 border-t border-neutral-100 pt-2">
           {PLANNED_LINKS.map((label) => (

@@ -44,7 +44,14 @@ export async function freshDb(): Promise<Db> {
 
   await db.exec(`
     create schema if not exists auth;
-    create table auth.users (id uuid primary key default gen_random_uuid());
+    -- Las columnas que de verdad usamos de auth.users. No están todas: solo
+    -- las que alguna migración o función lee, para que el stub no mienta sobre
+    -- lo que hay disponible.
+    create table auth.users (
+      id uuid primary key default gen_random_uuid(),
+      email text,
+      raw_user_meta_data jsonb not null default '{}'::jsonb
+    );
     create or replace function auth.uid() returns uuid
       language sql stable
       as $$ select nullif(current_setting('test.user_id', true), '')::uuid $$;

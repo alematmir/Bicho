@@ -457,6 +457,12 @@ entrypoint = "./functions/vault-selftest/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/vault-selftest/*.html" ]
 
+[functions.manage-business]
+enabled = true
+verify_jwt = false
+import_map = "./functions/manage-business/deno.json"
+entrypoint = "./functions/manage-business/index.ts"
+
 [functions.manage-staff]
 enabled = true
 verify_jwt = false

@@ -1,67 +1,49 @@
-import { useState, type FormEvent } from 'react';
-import { createBusiness, CreateBusinessError } from '../lib/business';
-import { useBusiness } from '../state/business';
+import { useAuth } from '../state/auth';
 
 /**
- * Sin registro público (ver docs/00-arquitectura.md, decisión "alta de
- * comercio y login"): quien llega hasta acá ya está logueado. Esta pantalla
- * solo aparece si todavía no es dueño de ningún comercio.
+ * Alguien con cuenta pero sin ningún comercio.
+ *
+ * ANTES esta pantalla ofrecía crear uno, y era el agujero: con el registro por
+ * mail abierto, cualquiera entraba, se creaba un comercio y quedaba usando la
+ * plataforma sin que nadie lo hubiera dado de alta. La arquitectura ya decía
+ * que el onboarding es asistido (§7.1.1); el código no lo cumplía.
+ *
+ * Ahora los comercios se dan de alta solo desde el panel de la plataforma, así
+ * que acá no hay nada que ofrecer: solo explicar por qué no ve nada. Se llega
+ * a esta pantalla en dos casos legítimos — un dueño al que le dieron de baja
+ * su último comercio, o una cuenta creada a medias.
  */
 export function Onboarding() {
-  const { refetch } = useBusiness();
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      await createBusiness(name.trim());
-      await refetch();
-    } catch (err) {
-      setError(err instanceof CreateBusinessError ? err.message : 'No se pudo crear el comercio.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { signOut, session } = useAuth();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
-      <div className="w-full max-w-sm">
-        <h1 className="text-center text-xl font-semibold text-neutral-900">
-          Creá tu comercio
-        </h1>
-        <p className="mt-1 text-center text-sm text-neutral-500">
-          Es lo único que hace falta para arrancar. El resto se configura después.
+      <div className="w-full max-w-sm text-center">
+        <h1 className="text-xl font-semibold text-neutral-900">Tu cuenta no tiene comercio</h1>
+        <p className="mt-2 text-sm text-neutral-500">
+          Entraste bien con <span className="font-medium">{session?.user.email}</span>, pero esa
+          cuenta no está asociada a ningún comercio.
         </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-6 space-y-4 rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
+        <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-5 text-left">
+          <p className="text-sm font-medium text-neutral-800">¿Qué hacer?</p>
+          <ul className="mt-2 space-y-1.5 text-sm text-neutral-600">
+            <li>
+              Si tu comercio ya está en Bicho, pedile a quien lo administra que te agregue desde
+              Configuración → Usuarios.
+            </li>
+            <li>
+              Si todavía no lo diste de alta, escribinos y lo damos de alta nosotros.
+            </li>
+          </ul>
+        </div>
+
+        <button
+          onClick={() => signOut()}
+          className="mt-6 text-sm text-neutral-500 underline hover:text-neutral-800"
         >
-          <label className="block">
-            <span className="mb-1 block text-sm text-neutral-700">Nombre del comercio</span>
-            <input
-              type="text"
-              required
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="La Estación Burgers"
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm outline-none focus:border-neutral-900"
-            />
-          </label>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || name.trim().length < 3}
-            className="w-full rounded-full bg-neutral-900 py-2.5 font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
-          >
-            {loading ? 'Creando...' : 'Crear comercio'}
-          </button>
-        </form>
+          Salir y entrar con otra cuenta
+        </button>
       </div>
     </div>
   );

@@ -6,8 +6,12 @@ import { freshDb, type Db } from './helpers/db';
 let db: Db;
 beforeAll(async () => { db = await freshDb(); });
 
-// businesses es el tenant en sí: su clave es id, no business_id.
-const SIN_BUSINESS_ID = ['businesses'];
+// Las dos únicas tablas que no son de un comercio:
+//   businesses      → es el tenant en sí; su clave es id, no business_id.
+//   platform_admins → está por ENCIMA de los comercios. Es quién puede dar de
+//                     alta negocios en la plataforma, y por eso justamente no
+//                     pertenece a ninguno.
+const SIN_BUSINESS_ID = ['businesses', 'platform_admins'];
 
 describe('seguridad', () => {
   it('todas las tablas de public tienen RLS activo', async () => {

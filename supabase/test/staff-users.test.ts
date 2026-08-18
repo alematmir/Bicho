@@ -155,6 +155,22 @@ describe('el comercio no se queda sin dueño', () => {
     expect(r.rows[0].is_active).toBe(false);
   });
 
+  // La guarda existe para que nadie se deje afuera de su propio negocio, no
+  // para volver indestructible al comercio. Cuando se borra entero, la
+  // membresía del dueño se va en cascada y eso es correcto.
+  it('pero SÍ se puede borrar el comercio entero', async () => {
+    await db.exec(`insert into public.businesses (id, slug, name)
+                   values ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'para-borrar', 'Para Borrar')`);
+    await db.exec(`insert into public.business_users (business_id, user_id, role)
+                   values ('cccccccc-cccc-cccc-cccc-cccccccccccc', '${ID.userB}', 'owner')`);
+
+    await db.exec(`delete from public.businesses
+                    where id = 'cccccccc-cccc-cccc-cccc-cccccccccccc'`);
+
+    const r = await db.query(`select id from public.businesses where slug = 'para-borrar'`);
+    expect(r.rows).toHaveLength(0);
+  });
+
   it('desactivar a un empleado no dispara la guarda', async () => {
     await db.exec(`update public.business_users set is_active = false
                     where user_id = '${ID.staffA}'`);
