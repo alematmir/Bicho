@@ -73,6 +73,20 @@ export async function createBusiness(input: {
   };
 }
 
+/**
+ * Borra el comercio y todo lo suyo. Pide el slug como confirmación: escribirlo
+ * a mano obliga a mirar cuál se está borrando.
+ */
+export async function deleteBusiness(
+  businessId: string,
+  confirmSlug: string,
+): Promise<{ name: string; orders: number; customers: number }> {
+  const data = await callManageBusiness({
+    action: 'delete', business_id: businessId, confirm_slug: confirmSlug,
+  });
+  return data.deleted;
+}
+
 /** El plan: cuánto y qué día. Va por RLS directo — no crea usuarios. */
 export async function saveSubscription(
   businessId: string,

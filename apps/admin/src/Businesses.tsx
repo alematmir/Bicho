@@ -6,6 +6,7 @@ import {
 } from './lib/platform';
 import { NewBusinessModal } from './NewBusinessModal';
 import { BusinessDetail } from './BusinessDetail';
+import { PasswordModal } from './PasswordModal';
 
 const SHOP_BASE_URL = import.meta.env.VITE_SHOP_BASE_URL ?? '';
 
@@ -15,6 +16,7 @@ export function Businesses({ email }: { email: string }) {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState<BusinessRow | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -54,6 +56,13 @@ export function Businesses({ email }: { email: string }) {
             className="rounded-full bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
           >
             + Dar de alta
+          </button>
+          <button
+            onClick={() => setChangingPassword(true)}
+            title="Para entrar sin pasar por el mail"
+            className="rounded-full px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-100"
+          >
+            Contraseña
           </button>
           <button
             onClick={() => supabase.auth.signOut()}
@@ -106,6 +115,8 @@ export function Businesses({ email }: { email: string }) {
           </div>
         )}
       </div>
+
+      {changingPassword && <PasswordModal onClose={() => setChangingPassword(false)} />}
 
       {creating && (
         <NewBusinessModal

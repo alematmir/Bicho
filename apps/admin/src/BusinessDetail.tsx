@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { formatArs, parseAmount } from '@bicho/shared';
 import {
-  currentPeriod, deletePayment, fetchPayments, periodLabel, recentPeriods, recordPayment,
-  saveSubscription, STATE_LABEL, STATE_TONE, type BusinessRow, type SubscriptionPayment,
+  currentPeriod, deleteBusiness, deletePayment, fetchPayments, periodLabel, recentPeriods,
+  recordPayment, saveSubscription, STATE_LABEL, STATE_TONE,
+  type BusinessRow, type SubscriptionPayment,
 } from './lib/platform';
 import { Button, Field, INPUT, Modal } from './Modal';
 
@@ -38,6 +39,11 @@ export function BusinessDetail({
   );
   const [method, setMethod] = useState('transferencia');
   const [recording, setRecording] = useState(false);
+
+  // Borrar
+  const [deleting, setDeleting] = useState(false);
+  const [confirmSlug, setConfirmSlug] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   async function loadPayments() {
     setLoading(true);
@@ -282,6 +288,73 @@ export function BusinessDetail({
         {error && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
         )}
+
+        {/* --- Borrar ------------------------------------------------------- */}
+        <section className="border-t border-neutral-100 pt-4">
+          {!deleting ? (
+            <button
+              onClick={() => setDeleting(true)}
+              className="text-xs text-neutral-400 underline hover:text-red-600"
+            >
+              Borrar este comercio
+            </button>
+          ) : (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="text-sm font-medium text-red-800">
+                Esto borra todo y no se puede deshacer
+              </p>
+              <p className="mt-1 text-xs text-red-700">
+                Se van con él sus {business.order_count} pedidos, sus clientes, su catálogo y
+                todas las conversaciones de WhatsApp. Las cuentas de sus usuarios quedan,
+                pero sin acceso a nada.
+              </p>
+
+              <div className="mt-3">
+                <p className="text-xs text-red-700">
+                  Escribí <span className="font-mono font-semibold">{business.slug}</span> para
+                  confirmar:
+                </p>
+                <input
+                  value={confirmSlug}
+                  onChange={(e) => setConfirmSlug(e.target.value)}
+                  placeholder={business.slug}
+                  className="mt-1 w-full rounded-lg border border-red-300 px-3 py-2 font-mono text-sm outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div className="mt-3 flex gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setDeleting(false);
+                    setConfirmSlug('');
+                  }}
+                  disabled={removing}
+                >
+                  No, dejalo
+                </Button>
+                <button
+                  disabled={removing || confirmSlug.trim().toLowerCase() !== business.slug}
+                  onClick={async () => {
+                    setRemoving(true);
+                    setError(null);
+                    try {
+                      await deleteBusiness(business.id, confirmSlug);
+                      onChanged();
+                      onClose();
+                    } catch (e) {
+                      setError((e as Error).message);
+                      setRemoving(false);
+                    }
+                  }}
+                  className="rounded-full bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {removing ? 'Borrando...' : 'Borrar para siempre'}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </Modal>
   );

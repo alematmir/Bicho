@@ -59,6 +59,8 @@ Deno.serve(async (req) => {
       return await createBusiness(body);
     case "list":
       return await listBusinesses();
+    case "delete":
+      return await deleteBusiness(body);
     default:
       return fail(`Acción desconocida: ${body.action}`);
   }
@@ -145,6 +147,46 @@ async function createBusiness(body: Record<string, string>): Promise<Response> {
     business: { id: business.id, slug: business.slug, name: business.name },
     owner: { id: ownerId, email: ownerEmail, is_new: createdUser },
   });
+}
+
+/**
+ * Borra un comercio y TODO lo suyo.
+ *
+ * El cascade se lleva pedidos, clientes, catálogo, conversaciones, mensajes,
+ * pagos y la suscripción. No hay papelera ni forma de deshacerlo, así que se
+ * exige el slug exacto como confirmación: escribirlo a mano obliga a mirar cuál
+ * se está borrando, cosa que un botón de "sí, seguro" no logra.
+ *
+ * Las cuentas de los usuarios NO se borran. Un dueño puede tener otro comercio,
+ * y aunque no lo tenga, su cuenta sin membresías no da acceso a nada — la
+ * pantalla de onboarding se lo explica.
+ */
+async function deleteBusiness(body: Record<string, string>): Promise<Response> {
+  const businessId = body.business_id;
+  const confirmSlug = (body.confirm_slug ?? "").trim().toLowerCase();
+  if (!businessId) return fail("Falta el comercio");
+
+  const { data: business } = await supabaseAdmin
+    .from("businesses").select("slug, name").eq("id", businessId).maybeSingle();
+  if (!business) return fail("Ese comercio ya no existe");
+
+  if (confirmSlug !== business.slug) {
+    return fail(`Para borrarlo, escribí exactamente "${business.slug}"`);
+  }
+
+  // Se cuenta antes de borrar, para poder decir en el aviso qué se llevó
+  // puesto. Después ya no hay a quién preguntarle.
+  const [{ count: orders }, { count: customers }] = await Promise.all([
+    supabaseAdmin.from("orders").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId),
+    supabaseAdmin.from("customers").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId),
+  ]);
+
+  const { error } = await supabaseAdmin.from("businesses").delete().eq("id", businessId);
+  if (error) return fail(`No pudimos borrarlo: ${error.message}`);
+
+  return ok({ ok: true, deleted: { name: business.name, orders, customers } });
 }
 
 async function listBusinesses(): Promise<Response> {
