@@ -6,6 +6,8 @@ type AuthContextValue = {
   session: Session | null;
   loading: boolean;
   signInWithEmail: (email: string) => Promise<{ error: string | null }>;
+  /** El código de 6 dígitos que llega en el mismo mail del link. */
+  verifyEmailCode: (email: string, code: string) => Promise<{ error: string | null }>;
   /** Para empleados: entran con usuario y contraseña, sin tocar un mail. */
   signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -42,6 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   /**
+   * El mismo mail de signInWithEmail trae, además del link, un código de 6
+   * dígitos. Verificarlo acá evita la ventana nueva que abre el link: la
+   * sesión se activa en la misma pestaña donde se pidió entrar.
+   */
+  async function verifyEmailCode(email: string, code: string) {
+    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' });
+    return { error: error?.message ?? null };
+  }
+
+  /**
    * El empleado escribe "juan" y su clave; acá abajo eso es un mail sintético
    * que no existe en ningún servidor de correo. Ver staffEmail() en lib/staff.ts
    * y el comentario largo de 20260818000600_staff_users.sql.
@@ -57,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, loading, signInWithEmail, signInWithPassword, signOut }}
+      value={{ session, loading, signInWithEmail, verifyEmailCode, signInWithPassword, signOut }}
     >
       {children}
     </AuthContext.Provider>

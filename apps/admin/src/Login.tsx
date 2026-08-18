@@ -103,13 +103,21 @@ function ClaveForm() {
   );
 }
 
+/**
+ * El mail trae DOS formas de entrar en el mismo correo: un link (abre ventana
+ * nueva) y un código de 6 dígitos (se pega acá mismo, sin salir de esta
+ * pantalla). Se ofrece el código como la vía principal — es la que resuelve
+ * el problema real — y el link queda mencionado por si alguien prefiere tocar
+ * en vez de tipear.
+ */
 function MailForm() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSend(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -123,26 +131,68 @@ function MailForm() {
     if (error) {
       // El registro está cerrado: un mail que no existe da un error de
       // Supabase que no aclara nada. Mejor decirlo derecho.
-      setError('No pudimos mandarte el link. Fijate que sea el mail correcto.');
+      setError('No pudimos mandarte el código. Fijate que sea el mail correcto.');
       return;
     }
     setSent(true);
   }
 
+  async function handleVerify(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: code.trim(),
+      type: 'email',
+    });
+
+    setLoading(false);
+    if (error) setError('Ese código no es válido, o ya venció.');
+    // Sin else: al validar, onAuthStateChange en App.tsx toma la sesión sola.
+  }
+
   if (sent) {
     return (
-      <div className="text-center">
-        <p className="font-medium text-neutral-900">Revisá tu email</p>
-        <p className="mt-1 text-sm text-neutral-500">
-          Si esa cuenta administra la plataforma, te va a llegar un link para entrar. Ojo
-          que se abre en una ventana nueva.
+      <form onSubmit={handleVerify} className="space-y-4">
+        <p className="text-sm text-neutral-600">
+          Te mandamos un código a <span className="font-medium">{email}</span>.
         </p>
-      </div>
+
+        <label className="block">
+          <span className="mb-1 block text-sm text-neutral-700">Código</span>
+          <input
+            required
+            autoFocus
+            inputMode="numeric"
+            maxLength={6}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            placeholder="123456"
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-center font-mono text-lg tracking-widest outline-none focus:border-brand-500"
+          />
+        </label>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading || code.length !== 6}
+          className="w-full rounded-full bg-brand-600 py-2.5 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {loading ? 'Verificando...' : 'Entrar'}
+        </button>
+
+        <p className="text-center text-xs text-neutral-400">
+          Ese mismo mail también trae un link, si preferís tocar en vez de tipear.
+        </p>
+      </form>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSend} className="space-y-4">
       <label className="block">
         <span className="mb-1 block text-sm text-neutral-700">Tu email</span>
         <input
@@ -162,7 +212,7 @@ function MailForm() {
         disabled={loading}
         className="w-full rounded-full bg-brand-600 py-2.5 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
       >
-        {loading ? 'Enviando...' : 'Mandarme el link'}
+        {loading ? 'Enviando...' : 'Mandarme un código'}
       </button>
     </form>
   );
