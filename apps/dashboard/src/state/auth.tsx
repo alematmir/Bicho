@@ -6,6 +6,8 @@ type AuthContextValue = {
   session: Session | null;
   loading: boolean;
   signInWithEmail: (email: string) => Promise<{ error: string | null }>;
+  /** Para empleados: entran con usuario y contraseña, sin tocar un mail. */
+  signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -39,12 +41,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null };
   }
 
+  /**
+   * El empleado escribe "juan" y su clave; acá abajo eso es un mail sintético
+   * que no existe en ningún servidor de correo. Ver staffEmail() en lib/staff.ts
+   * y el comentario largo de 20260818000600_staff_users.sql.
+   */
+  async function signInWithPassword(email: string, password: string) {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message ?? null };
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
   }
 
   return (
-    <AuthContext.Provider value={{ session, loading, signInWithEmail, signOut }}>
+    <AuthContext.Provider
+      value={{ session, loading, signInWithEmail, signInWithPassword, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );

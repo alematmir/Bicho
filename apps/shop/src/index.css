@@ -1,9 +1,43 @@
 @import "tailwindcss";
 
+/* =============================================================================
+ * Colores de la tienda.
+ *
+ * Los define el comercio desde el dashboard (businesses.brand_primary /
+ * brand_secondary) y los escribe applyBrand(), en src/lib/brand.ts, apenas
+ * carga la tienda. Los valores de acá son el default: una tienda sin marca
+ * configurada queda igual que siempre, en neutros.
+ *
+ * Los tonos `-ink` NO se eligen: los calcula readableTextOn() de
+ * @bicho/shared según el contraste real contra el fondo. Sin eso, un comercio
+ * con primario amarillo termina con botones blancos sobre amarillo.
+ * ========================================================================== */
 :root {
   color-scheme: light;
+
+  --brand-primary: #171717;
+  --brand-primary-ink: #ffffff;
+  --brand-primary-hover: #404040;
+
+  --brand-secondary: #f5f5f5;
+  --brand-secondary-ink: #171717;
+}
+
+@theme inline {
+  --color-brand: var(--brand-primary);
+  --color-brand-ink: var(--brand-primary-ink);
+  --color-brand-hover: var(--brand-primary-hover);
+  --color-accent: var(--brand-secondary);
+  --color-accent-ink: var(--brand-secondary-ink);
 }
 
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
+}
+
+@layer base {
+  :focus-visible {
+    @apply outline-2 outline-offset-2;
+    outline-color: var(--brand-primary);
+  }
 }

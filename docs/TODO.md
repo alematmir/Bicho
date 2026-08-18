@@ -30,9 +30,8 @@ En orden. Lo primero es lo que hace falta para ver algo funcionando.
 - [ ] Que el shop lea `?s=token` de la URL (hoy pide el teléfono en el checkout
       igual, aunque venga de WhatsApp con sesión ya resuelta — ver decisión 9
       de la arquitectura)
-- [ ] Pantalla para editar los textos de cada mensaje por comercio (el esquema
-      ya lo soporta — `message_templates` con override por `business_id` —
-      falta la UI en el dashboard)
+- [x] Pantalla para editar los textos de cada mensaje por comercio
+      (Configuración → Mensajes, solo el dueño)
 
 ## Pagos
 
@@ -45,17 +44,32 @@ En orden. Lo primero es lo que hace falta para ver algo funcionando.
 - [ ] Transferencia: comprobante y verificación de un tap
 - [ ] Devoluciones
 
+## Usuarios y permisos
+
+- [x] Empleados con usuario y contraseña que crea el dueño (sin email de por medio)
+- [x] Login con dos solapas: dueño por magic link, empleado por usuario
+- [x] Dar de baja sin perder el historial (`is_active`, e `is_member()` lo respeta)
+- [x] Historial del pedido con el nombre de quién lo movió
+- [ ] PIN para firmar acciones delicadas en un mostrador compartido (ver backlog)
+
 ## Dashboard
 
 - [x] Auth (magic link) y alta de comercio
-- [x] ABM de catálogo — falta imágenes (bucket de Storage sin crear)
+- [x] ABM de catálogo — falta la UI de imágenes (el bucket `business-assets`
+      ya existe, ver 20260818000100_branding.sql)
+- [x] Stock por unidades (contador por producto, con aviso de stock bajo)
+- [x] Productos por rubro, con buscador
+- [x] Panel de quién espera que le conteste una persona
 - [ ] Adicionales (UI de edición; el esquema y la venta ya los soportan)
 - [ ] Sucursales y horarios
-- [x] Tablero de pedidos por estado
+- [x] Tablero de pedidos por estado — arrastrable, con vistas de lista y cards
 - [ ] Ficha de cliente
 - [x] Botón responder por WhatsApp
 - [ ] Pedido manual (venta asistida)
 - [ ] Estado de las conexiones
+- [x] Sistema de diseño propio y ayuda contextual (`?`) en WhatsApp y Mercado Pago
+- [x] Configuración: marca (logo y colores), mensajes automáticos, datos del comercio
+- [x] Centro de notificaciones en vivo (pedidos, pagos, handoff)
 
 ## Infraestructura
 

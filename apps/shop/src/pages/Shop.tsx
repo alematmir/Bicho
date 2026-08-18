@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { applyBrand } from '../lib/brand';
 import { fetchCatalog, fetchStorefront, StoreNotFoundError } from '../lib/catalog';
 import type { Branch, Business, Category, Product } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
@@ -32,6 +33,9 @@ export function Shop() {
     (async () => {
       try {
         const { business, branches } = await fetchStorefront(slug);
+        // Antes de pintar nada: si los colores se aplicaran después del primer
+        // render, la tienda parpadearía en neutro y recién ahí tomaría la marca.
+        applyBrand(business);
         if (branches.length === 0) {
           if (!cancelled) {
             setState({ status: 'error', message: 'Este comercio no tiene sucursales activas.' });

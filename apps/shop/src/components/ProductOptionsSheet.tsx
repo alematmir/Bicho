@@ -90,7 +90,7 @@ export function ProductOptionsSheet({
                       key={option.id}
                       className={`flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 text-sm transition-colors ${
                         checked
-                          ? 'border-neutral-900 bg-neutral-900/5'
+                          ? 'border-brand bg-brand/5'
                           : 'border-neutral-200 hover:border-neutral-300'
                       }`}
                     >
@@ -100,7 +100,7 @@ export function ProductOptionsSheet({
                           name={group.id}
                           checked={checked}
                           onChange={() => toggle(group.id, option.id, group.max_select)}
-                          className="accent-neutral-900"
+                          className="accent-brand"
                         />
                         {option.name}
                       </span>
@@ -139,7 +139,7 @@ export function ProductOptionsSheet({
           <button
             disabled={missingRequired}
             onClick={() => onConfirm(chosenOptions, qty)}
-            className="rounded-full bg-neutral-900 px-6 py-2.5 font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full bg-brand px-6 py-2.5 font-medium text-brand-ink transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             Agregar · <Money cents={unitPrice * qty} />
           </button>

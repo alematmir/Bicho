@@ -8,6 +8,9 @@ export type Business = {
   name: string;
   logo_url: string | null;
   currency: string;
+  /** Colores elegidos por el comercio. NULL = tienda con la paleta por defecto. */
+  brand_primary: string | null;
+  brand_secondary: string | null;
 };
 
 export type Branch = {

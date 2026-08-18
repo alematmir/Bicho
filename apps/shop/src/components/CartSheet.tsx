@@ -77,7 +77,7 @@ export function CartSheet({
 
             <button
               onClick={onCheckout}
-              className="mt-4 w-full rounded-full bg-neutral-900 py-3 font-medium text-white hover:bg-neutral-800"
+              className="mt-4 w-full rounded-full bg-brand py-3 font-medium text-brand-ink transition-colors hover:bg-brand-hover"
             >
               Continuar
             </button>

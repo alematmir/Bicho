@@ -64,7 +64,7 @@ npm test          # una corrida
 npm run test:watch
 ```
 
-141 pruebas en ~3 segundos, sin Docker. Las de base de datos corren sobre
+306 pruebas en ~10 segundos, sin Docker. Las de base de datos corren sobre
 Postgres compilado a WASM: aplican las migraciones desde cero contra una base
 limpia por archivo.
 
@@ -75,11 +75,15 @@ supabase/test/
   money.test.ts        devoluciones parciales, topes, idempotencia de webhooks
   inventory.test.ts    stock booleano vs. contado, reservas, stock por sucursal
   conventions.test.ts  RLS, business_id y centavos en toda tabla nueva
+  branding.test.ts     colores válidos, y que nadie escriba en la carpeta de otro
+  notifications.test.ts qué dispara cada aviso, y que solo se pueda marcar leído
+  message-templates.test.ts  el dueño edita los textos, el empleado no
 
 packages/shared/src/
   orders.test.ts       transiciones válidas, alcanzabilidad, avisos al cliente
   money.test.ts        parseo argentino, redondeo, ida y vuelta sin perder centavos
   phone.test.ts        todas las formas de escribir un teléfono argentino
+  color.test.ts        contraste WCAG: qué texto va sobre cada color de marca
 ```
 
 ### Verificación contra el proyecto real

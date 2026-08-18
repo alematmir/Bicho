@@ -1,7 +1,12 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './state/auth';
 import { BusinessProvider, useBusiness } from './state/business';
+import { NotificationsProvider } from './state/notifications';
+import { WaitingProvider } from './state/waiting';
 import { Sidebar } from './components/Sidebar';
+import { NotificationBell } from './components/NotificationBell';
+import { AttentionPanel } from './components/AttentionPanel';
+import { WaitingButton } from './components/WaitingButton';
 import { Login } from './pages/Login';
 import { Onboarding } from './pages/Onboarding';
 import { Products } from './pages/Products';
@@ -9,6 +14,7 @@ import { Orders } from './pages/Orders';
 import { WhatsApp } from './pages/WhatsApp';
 import { MercadoPago } from './pages/MercadoPago';
 import { MercadoPagoCallback } from './pages/MercadoPagoCallback';
+import { Settings } from './pages/Settings';
 
 export default function App() {
   return (
@@ -26,8 +32,15 @@ export default function App() {
                 <Route index element={<Navigate to="/orders" replace />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/orders" element={<Orders />} />
-                <Route path="/whatsapp" element={<WhatsApp />} />
-                <Route path="/mercadopago" element={<MercadoPago />} />
+
+                {/* Esconderlas del sidebar no alcanza: alguien puede escribir
+                    la URL a mano. La base igual lo rechazaría, pero con un
+                    error de Postgres en vez de una explicación. */}
+                <Route element={<RequireOwner />}>
+                  <Route path="/whatsapp" element={<WhatsApp />} />
+                  <Route path="/mercadopago" element={<MercadoPago />} />
+                  <Route path="/configuracion" element={<Settings />} />
+                </Route>
               </Route>
             </Route>
           </Route>
@@ -89,14 +102,68 @@ function RequireBusiness() {
   return <Outlet />;
 }
 
+/** Lo que administra el negocio, no lo que lo opera. Solo el dueño. */
+function RequireOwner() {
+  const { current } = useBusiness();
+  if (current?.role !== 'owner') return <Navigate to="/orders" replace />;
+  return <Outlet />;
+}
+
+/**
+ * Barra superior propia, con altura real.
+ *
+ * Antes la campanita flotaba en `absolute` sobre el contenido y se encimaba
+ * con los botones del encabezado de cada página — el selector de vista y el
+ * botón de historial quedaban tapados. Una franja con su propio espacio no se
+ * puede pisar con nada, y de paso queda pegada arriba al scrollear, que es
+ * donde tiene que estar un indicador de avisos.
+ */
 function Shell() {
+  // El panel de "esperando una respuesta" se abre desde la campanita, pero
+  // vive acá: se llega también por `?atencion=1`, que es a donde apunta la
+  // notificación de handoff.
+  const [params, setParams] = useSearchParams();
+  // `?atencion=1` abre la lista; `?atencion=<customer_id>` abre esa charla.
+  const attention = params.get('atencion');
+
+  function openAttention() {
+    const next = new URLSearchParams(params);
+    next.set('atencion', '1');
+    setParams(next, { replace: true });
+  }
+
+  function closeAttention() {
+    const next = new URLSearchParams(params);
+    next.delete('atencion');
+    setParams(next, { replace: true });
+  }
+
   return (
-    <div className="flex">
-      <Sidebar />
-      <main className="min-h-screen flex-1 overflow-y-auto">
-        <Outlet />
-      </main>
-    </div>
+    <NotificationsProvider>
+      <WaitingProvider>
+        <div className="flex">
+          <Sidebar />
+
+          <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-neutral-50/90 px-6 backdrop-blur">
+              <WaitingButton onOpen={openAttention} />
+              <NotificationBell />
+            </header>
+
+            <main className="min-w-0 flex-1 overflow-y-auto">
+              <Outlet />
+            </main>
+          </div>
+        </div>
+
+        {attention && (
+          <AttentionPanel
+            onClose={closeAttention}
+            focusCustomerId={attention !== '1' ? attention : undefined}
+          />
+        )}
+      </WaitingProvider>
+    </NotificationsProvider>
   );
 }
 

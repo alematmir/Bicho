@@ -9,10 +9,12 @@ export function CartBar({ onOpen }: { onOpen: () => void }) {
   return (
     <button
       onClick={onOpen}
-      className="fixed inset-x-4 bottom-4 z-40 flex items-center justify-between rounded-full bg-neutral-900 px-5 py-3.5 text-white shadow-lg sm:mx-auto sm:max-w-lg"
+      className="fixed inset-x-4 bottom-4 z-40 flex items-center justify-between rounded-full bg-brand px-5 py-3.5 text-brand-ink shadow-lg transition-colors hover:bg-brand-hover sm:mx-auto sm:max-w-lg"
     >
       <span className="flex items-center gap-2 font-medium">
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-semibold text-neutral-900">
+        {/* El contador invierte los colores del botón: el mismo par ya está
+            verificado por contraste, así que no hace falta un tercer color. */}
+        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-ink text-sm font-semibold text-brand">
           {itemCount}
         </span>
         Ver carrito

@@ -12,7 +12,19 @@ export type ProductRow = {
   is_active: boolean;
   position: number;
   is_available: boolean; // de inventory, para la sucursal activa
+
+  /**
+   * false → stock "hay / no hay", manda is_available.
+   * true  → stock contado, manda quantity y is_available se deriva.
+   * Ver el comentario de products.track_quantity en 20260816000200_catalog.sql.
+   */
+  track_quantity: boolean;
+  /** Unidades en la sucursal activa. NULL cuando el producto no cuenta stock. */
+  quantity: number | null;
 };
+
+/** Debajo de esto la lista lo marca en ámbar. */
+export const LOW_STOCK_THRESHOLD = 5;
 
 // -----------------------------------------------------------------------------
 // Escritura directa vía supabase-js: a diferencia de create-order, acá no hay
@@ -62,7 +74,7 @@ export async function fetchProductsForManagement(
 
   let query = supabase
     .from('products')
-    .select('id, category_id, name, description, image_url, price_cents, is_active, position, inventory(is_available, branch_id)')
+    .select('id, category_id, name, description, image_url, price_cents, is_active, position, track_quantity, inventory(is_available, quantity, branch_id)')
     .eq('business_id', businessId)
     .order('position');
 
@@ -70,9 +82,8 @@ export async function fetchProductsForManagement(
   if (error) throw error;
 
   const products: ProductRow[] = (data ?? []).map((p) => {
-    const inv = (p.inventory as { is_available: boolean; branch_id: string }[]).find(
-      (i) => i.branch_id === branchId,
-    );
+    const inv = (p.inventory as { is_available: boolean; quantity: number | null; branch_id: string }[])
+      .find((i) => i.branch_id === branchId);
     return {
       id: p.id,
       category_id: p.category_id,
@@ -83,6 +94,8 @@ export async function fetchProductsForManagement(
       is_active: p.is_active,
       position: p.position,
       is_available: inv?.is_available ?? false,
+      track_quantity: p.track_quantity,
+      quantity: inv?.quantity ?? null,
     };
   });
 
@@ -145,6 +158,67 @@ export async function setStockAvailable(
     .eq('branch_id', branchId)
     .eq('product_id', productId);
   if (error) throw error;
+}
+
+/**
+ * Cambia las unidades en stock de un producto contado.
+ *
+ * `is_available` se escribe junto con la cantidad y no se deja librado a nadie:
+ * inventory_in_stock() exige las DOS cosas (disponible Y con unidades), así que
+ * un producto que llega a 0 sin que se apague el booleano seguiría figurando
+ * como comprable en la tienda hasta que create-order lo rebote — con el cliente
+ * ya con el carrito lleno.
+ */
+export async function setStockQuantity(
+  businessId: string,
+  branchId: string,
+  productId: string,
+  quantity: number,
+): Promise<void> {
+  const safe = Math.max(0, Math.floor(quantity));
+  const { error } = await supabase
+    .from('inventory')
+    .update({ quantity: safe, is_available: safe > 0 })
+    .eq('business_id', businessId)
+    .eq('branch_id', branchId)
+    .eq('product_id', productId);
+  if (error) throw error;
+}
+
+/**
+ * Prende o apaga el conteo por unidades de un producto.
+ *
+ * Los dos modos viven en la misma fila de inventory y se distinguen por si
+ * quantity es NULL. Al apagar el conteo hay que volver a NULL explícitamente:
+ * si quedara un número, decrement_stock_for_order() lo seguiría descontando en
+ * cada venta aunque la pantalla ya no muestre el contador.
+ */
+export async function setTrackQuantity(
+  businessId: string,
+  branchId: string | null,
+  productId: string,
+  track: boolean,
+  initialQuantity = 0,
+): Promise<void> {
+  const { error } = await supabase
+    .from('products')
+    .update({ track_quantity: track })
+    .eq('id', productId);
+  if (error) throw error;
+
+  if (!branchId) return;
+
+  const patch = track
+    ? { quantity: Math.max(0, Math.floor(initialQuantity)), is_available: initialQuantity > 0 }
+    : { quantity: null, is_available: true };
+
+  const { error: invError } = await supabase
+    .from('inventory')
+    .update(patch)
+    .eq('business_id', businessId)
+    .eq('branch_id', branchId)
+    .eq('product_id', productId);
+  if (invError) throw invError;
 }
 
 // -----------------------------------------------------------------------------

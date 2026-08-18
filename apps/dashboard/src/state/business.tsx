@@ -8,6 +8,8 @@ export type Membership = {
   slug: string;
   name: string;
   logo_url: string | null;
+  /** Cómo se llama esta persona en este comercio. Null para el dueño con magic link. */
+  display_name: string | null;
 };
 
 type BusinessContextValue = {
@@ -47,7 +49,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     setError(null);
     const { data, error } = await supabase
       .from('business_users')
-      .select('business_id, role, businesses(slug, name, logo_url)')
+      .select('business_id, role, display_name, businesses(slug, name, logo_url)')
       .eq('user_id', session.user.id);
 
     if (error) {
@@ -61,7 +63,10 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       .filter((r) => r.businesses)
       .map((r) => {
         const b = r.businesses as unknown as { slug: string; name: string; logo_url: string | null };
-        return { business_id: r.business_id, role: r.role, slug: b.slug, name: b.name, logo_url: b.logo_url };
+        return {
+          business_id: r.business_id, role: r.role, slug: b.slug, name: b.name,
+          logo_url: b.logo_url, display_name: r.display_name,
+        };
       });
 
     setMemberships(rows);

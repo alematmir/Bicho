@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { tryToE164 } from '@bicho/shared';
+import { applyBrand } from '../lib/brand';
 import { fetchStorefront } from '../lib/catalog';
 import type { Branch, Business } from '../lib/types';
 import { CartProvider, useCart } from '../state/cart';
@@ -21,6 +22,9 @@ export function Checkout() {
     fetchStorefront(slug)
       .then(({ business, branches }) => {
         if (branches.length === 0) throw new Error('Sin sucursales activas');
+        // También acá: se puede entrar al checkout por link directo, sin haber
+        // pasado por la tienda, y la marca tiene que estar igual.
+        applyBrand(business);
         setStore({ business, branch: branches[0] });
       })
       .catch((e) => setError((e as Error).message));
@@ -243,7 +247,7 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-full bg-neutral-900 py-3.5 font-medium text-white hover:bg-neutral-800 disabled:opacity-50"
+          className="w-full rounded-full bg-brand py-3.5 font-medium text-brand-ink transition-colors hover:bg-brand-hover disabled:opacity-50"
         >
           {submitting
             ? paymentMethod === 'mercadopago' ? 'Yendo a Mercado Pago...' : 'Confirmando...'
@@ -271,7 +275,7 @@ function FulfillmentButton({
       onClick={onClick}
       className={`flex-1 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
         active
-          ? 'border-neutral-900 bg-neutral-900 text-white'
+          ? 'border-brand bg-brand text-brand-ink'
           : 'border-neutral-200 text-neutral-700 hover:border-neutral-300'
       }`}
     >
@@ -296,12 +300,12 @@ function PaymentOption({
       type="button"
       onClick={onClick}
       className={`flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors ${
-        active ? 'border-neutral-900 bg-neutral-900/5' : 'border-neutral-200 hover:border-neutral-300'
+        active ? 'border-brand bg-brand/5' : 'border-neutral-200 hover:border-neutral-300'
       }`}
     >
       <span
         className={`mt-0.5 h-4 w-4 shrink-0 rounded-full border-2 ${
-          active ? 'border-neutral-900 bg-neutral-900' : 'border-neutral-300'
+          active ? 'border-brand bg-brand' : 'border-neutral-300'
         }`}
       />
       <span>
@@ -338,7 +342,7 @@ function Input({
         placeholder={placeholder}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900"
+        className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-brand"
       />
     </label>
   );

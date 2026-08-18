@@ -1,9 +1,43 @@
 @import "tailwindcss";
 
+/* =============================================================================
+ * Paleta de Bicho — la del panel, no la del comercio.
+ *
+ * El dashboard es Bicho; la tienda es del comercio (ver apps/shop, que sí lee
+ * businesses.brand_primary). Acá los colores son fijos a propósito: el panel
+ * muestra el verde de WhatsApp y el celeste de Mercado Pago como marcas ajenas,
+ * y si el color propio se les pareciera dejaría de entenderse quién es quién.
+ * Por eso el acento es violeta: no se confunde con ninguna de las dos.
+ *
+ * Contraste verificado contra blanco:
+ *   brand-600  7.3:1  → botones primarios y texto sobre relleno (AAA)
+ *   brand-500  5.9:1  → acentos, íconos, bordes activos (AA)
+ * ========================================================================== */
+@theme {
+  --color-brand-50: #f1eefe;
+  --color-brand-100: #e4defd;
+  --color-brand-200: #cbbffb;
+  --color-brand-300: #ac99f7;
+  --color-brand-400: #8b71f1;
+  --color-brand-500: #6247e8;
+  --color-brand-600: #5138d4;
+  --color-brand-700: #422dae;
+  --color-brand-800: #37278a;
+  --color-brand-900: #2e2270;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
+}
+
+/* El anillo de foco es accesibilidad, no decoración: se ve igual en todos los
+ * controles para que quien navega con teclado siempre sepa dónde está parado. */
+@layer base {
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
 }

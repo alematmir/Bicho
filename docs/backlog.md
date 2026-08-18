@@ -117,6 +117,80 @@ de apertura lo resuelve.
   tres vías (mail del banco, OCR, conciliación por MP). Ver sección 7.3.
 - Verificación automática de transferencias. No inventar un mecanismo sin definir
   antes cómo se hace.
+- **La máquina de estados no deja llegar a `PENDING_TRANSFER_VERIFICATION`.**
+  `create_order_atomic` crea TODO pedido en `PENDING_PAYMENT`, y
+  `orders_valid_transition` no permite `PENDING_PAYMENT →
+  PENDING_TRANSFER_VERIFICATION` (solo se llega desde `CREATED`). O sea que hoy
+  un pedido nacido en la tienda no puede pasar nunca a "verificar
+  transferencia". Todavía no molesta porque el flujo de transferencia no está
+  implementado, pero hay que resolverlo **antes** de construirlo: o se agrega
+  esa transición en los dos lados (`packages/shared/src/orders.ts` y
+  `20260816001000_order_status_guard.sql`, que se mantienen en sincronía a
+  mano), o `create_order_atomic` elige el estado inicial según
+  `payment_method`. Detectado al escribir `supabase/test/notifications.test.ts`.
+
+---
+
+## Efectivo y transferencia: no hay flujo
+
+`create_order_atomic` crea TODO pedido en `PENDING_PAYMENT`, sin importar el medio
+de pago. Para efectivo y transferencia eso significa que el pedido entra y ahí
+queda: no hay nada que le diga al comercio qué hacer, ni cómo pasa a `PAID`.
+
+Pendiente de diseñar, junto con dos cosas que ya se detectaron:
+- `PENDING_PAYMENT → PENDING_TRANSFER_VERIFICATION` no es una transición válida,
+  así que hoy un pedido de la tienda no puede llegar nunca a "verificar
+  transferencia" (ver más abajo).
+- Quién valida una transferencia ya queda firmado en `order_events.actor` y se
+  muestra en el historial del pedido. Falta la pantalla donde se valida.
+
+---
+
+## Mostrador compartido: PIN para firmar
+
+Los empleados entran con usuario y contraseña, y todo lo que hacen queda firmado.
+Pero si dejan la sesión de Juan abierta y valida Ana, la firma dice Juan.
+
+La salida sería pedir un PIN de 4 dígitos al firmar lo delicado (validar una
+transferencia, cancelar un pedido). Se descartó al elegir el login simple, y se
+anota acá porque el día que alguien valide mal una transferencia de $200.000, la
+diferencia entre "la sesión decía Juan" y "Juan puso su PIN" es la que importa.
+
+---
+
+## Landing y dominio propio
+
+`bicho.com.ar` ya está registrado y delegado a Cloudflare. La estructura decidida:
+
+```
+bicho.com.ar        landing        apps/landing (a construir)
+app.bicho.com.ar    dashboard      apps/dashboard
+pedi.bicho.com.ar   tiendas        apps/shop, en /{slug}
+```
+
+Subdominios y no paths: con un solo dominio, el `/{slug}` de las tiendas chocaría
+contra `/precios`, `/login` y demás — un comercio con slug "precios" rompería la
+landing.
+
+La landing va como app aparte y no como ruta del dashboard: se toca seguido (copy,
+precios, capturas) y no conviene redesplegar el dashboard por cambiar un título.
+
+**Hecho el 17/8/2026:** el dominio está conectado y funcionando.
+- `app.bicho.com.ar` → bicho-dashboard, `pedi.bicho.com.ar` → bicho-shop.
+- Registros CNAME en Cloudflare en **DNS only** (nube gris). Con el proxy
+  encendido, Vercel y Cloudflare se pelean por el certificado.
+- `SHOP_BASE_URL` (secret de Supabase) y `VITE_SHOP_BASE_URL` ya apuntan a
+  `pedi.bicho.com.ar`; el `site_url` de Auth a `app.bicho.com.ar`.
+
+Lo que queda de esto:
+- `bicho.com.ar` (la raíz) no está asignada a ningún proyecto: espera la landing.
+- **Agregar `https://app.bicho.com.ar/oauth/mercadopago/callback` a las redirect
+  URIs del panel de Mercado Pago.** Sin esto el OAuth falla desde el dominio
+  nuevo, con un error que no explica nada.
+- Cargar `VITE_SHOP_BASE_URL` en las env vars de Vercel del dashboard y
+  redesplegar: es de build, no de runtime.
+- El botón de la landing que cambia según la sesión se descartó por ahora: obliga
+  a cargar el SDK y compartir dominio. Un "Ingresar" que va a app.* alcanza.
 
 ---
 
@@ -125,11 +199,22 @@ de apertura lo resuelve.
 Cosas que fuiste tirando en la marcha. Anotadas tal cual, sin diseño ni
 alcance definido — eso se hace cuando se retomen, no antes.
 
-- **Volver a IDLE (saludo completo) después de un pedido terminado**, en vez de
-  solo reenviar el link. Hoy, tras un pedido CANCELLED/DELIVERED, "Hola" limpia
-  `activeOrderId` y reenvía el link de la tienda (arreglado — antes quedaba
-  repitiendo el estado del pedido viejo para siempre), pero no resetea a un
-  saludo con botones de cero. Funciona, no es la experiencia ideal.
+- ~~Volver a IDLE (saludo completo) después de un pedido terminado~~ →
+  resuelto (con un intento a medias en el camino, ver abajo). Un pedido
+  CANCELLED/DELIVERED ahora dispara el mismo mecanismo que la inactividad:
+  `whatsapp-webhook/index.ts` le pasa a `decide()` un evento `timeout` a
+  mano (no hay cron corriendo, ver docs/TODO.md) para volver el hilo entero a
+  IDLE, no solo borrar `activeOrderId` del contexto. El primer intento solo
+  hacía lo segundo, y la conversación quedaba en `LINK_SENT` — un "hola"
+  caía en esa rama y reenviaba el link viejo en silencio en vez del saludo
+  con botones. Se detectó con captura real de WhatsApp, no en los tests: el
+  bug vivía en la orquestación de la Edge Function, no en `decide()` (que ya
+  estaba bien testeado).
+
+  Por separado se agregó `isConversationStale()` en `conversation.ts`, mismo
+  mecanismo: si pasaron más de 30 minutos desde el último mensaje y no hay
+  pedido activo, el próximo mensaje que llega atraviesa primero ese
+  `timeout` y recién después el mensaje real.
 
 - **Recordar la dirección del cliente** entre pedidos, para no tener que
   tipearla cada vez. El esquema ya tiene la tabla `addresses` (customer_id,
