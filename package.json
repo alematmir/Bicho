@@ -7,7 +7,8 @@
     "test:watch": "vitest",
     "verify": "node scripts/verify-remote.mjs",
     "dev:shop": "npm run dev --workspace=shop",
-    "dev:dashboard": "npm run dev --workspace=dashboard"
+    "dev:dashboard": "npm run dev --workspace=dashboard",
+    "dev:admin": "npm run dev --workspace=admin"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.5",

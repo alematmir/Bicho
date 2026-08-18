@@ -127,6 +127,19 @@ async function createBusiness(body: Record<string, string>): Promise<Response> {
     name: "Principal",
   });
 
+  // La suscripción la crea un trigger al insertar el comercio; acá solo se le
+  // pone el plan si vino en el alta. Se hace después y no antes porque el
+  // trigger todavía no corrió cuando armamos el payload.
+  const monthly = Number(body.monthly_cents ?? 0);
+  const dueDay = Number(body.due_day ?? 10);
+  if (monthly > 0) {
+    await supabaseAdmin.from("subscriptions").update({
+      monthly_cents: Math.round(monthly),
+      due_day: Math.min(28, Math.max(1, Math.round(dueDay))),
+      notes: null,
+    }).eq("business_id", business.id);
+  }
+
   return ok({
     ok: true,
     business: { id: business.id, slug: business.slug, name: business.name },
@@ -139,17 +152,42 @@ async function listBusinesses(): Promise<Response> {
   // plataforma no es miembro de ninguno, así que por RLS no vería ni uno.
   const { data, error } = await supabaseAdmin
     .from("businesses")
-    .select("id, slug, name, is_active, created_at, business_users(user_id, role, is_active)")
+    .select("id, slug, name, is_active, created_at, business_users(user_id, role, is_active), subscriptions(monthly_cents, due_day, status, started_on, notes)")
     .order("created_at", { ascending: false });
 
   if (error) return fail(error.message);
 
+  // El mail del dueño solo existe en auth.users, que no se puede joinear desde
+  // PostgREST. Una sola llamada para todos, en vez de una por comercio.
   const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
   const emailById = new Map(authUsers?.users.map((u) => [u.id, u.email ?? ""]) ?? []);
 
-  const businesses = (data ?? []).map((b) => {
+  const rows = data ?? [];
+
+  // El semáforo lo calcula la base, que es la que sabe la fecha de hoy del
+  // servidor: si lo hiciera el navegador, el reloj mal puesto de una máquina
+  // marcaría a alguien como vencido sin estarlo.
+  const states = await Promise.all(rows.map(async (b: any) => {
+    const [{ data: state }, { data: owed }, { data: last }] = await Promise.all([
+      supabaseAdmin.rpc("subscription_state", { p_business_id: b.id }),
+      supabaseAdmin.rpc("subscription_months_owed", { p_business_id: b.id }),
+      supabaseAdmin.from("subscription_payments").select("period")
+        .eq("business_id", b.id).order("period", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    return { state, owed, last_period: last?.period ?? null };
+  }));
+
+  const { data: orderCounts } = await supabaseAdmin
+    .from("orders").select("business_id");
+  const ordersByBusiness = new Map<string, number>();
+  for (const o of orderCounts ?? []) {
+    ordersByBusiness.set(o.business_id, (ordersByBusiness.get(o.business_id) ?? 0) + 1);
+  }
+
+  const businesses = rows.map((b: any, i: number) => {
     const members = (b.business_users ?? []) as { user_id: string; role: string; is_active: boolean }[];
     const owner = members.find((m) => m.role === "owner" && m.is_active);
+    const sub = b.subscriptions ?? {};
     return {
       id: b.id,
       slug: b.slug,
@@ -158,6 +196,15 @@ async function listBusinesses(): Promise<Response> {
       created_at: b.created_at,
       owner_email: owner ? emailById.get(owner.user_id) ?? null : null,
       member_count: members.filter((m) => m.is_active).length,
+      order_count: ordersByBusiness.get(b.id) ?? 0,
+      monthly_cents: sub.monthly_cents ?? 0,
+      due_day: sub.due_day ?? 10,
+      status: sub.status ?? "active",
+      started_on: sub.started_on ?? b.created_at,
+      notes: sub.notes ?? null,
+      state: states[i].state ?? "sin_plan",
+      months_owed: states[i].owed ?? 0,
+      last_period: states[i].last_period,
     };
   });
 

@@ -15,7 +15,6 @@ import { WhatsApp } from './pages/WhatsApp';
 import { MercadoPago } from './pages/MercadoPago';
 import { MercadoPagoCallback } from './pages/MercadoPagoCallback';
 import { Settings } from './pages/Settings';
-import { Admin } from './pages/Admin';
 
 export default function App() {
   return (
@@ -43,9 +42,6 @@ export default function App() {
                   <Route path="/configuracion" element={<Settings />} />
                 </Route>
 
-                <Route element={<RequirePlatformAdmin />}>
-                  <Route path="/admin" element={<Admin />} />
-                </Route>
               </Route>
             </Route>
           </Route>
@@ -76,7 +72,7 @@ function RequireAuth() {
  * duplicar el que ya existe — así que ahí se muestra el error, no el alta.
  */
 function RequireBusiness() {
-  const { loading, error, current, isAdmin, refetch } = useBusiness();
+  const { loading, error, current, refetch } = useBusiness();
   const { signOut } = useAuth();
 
   if (loading) return <CenteredMessage>Cargando...</CenteredMessage>;
@@ -103,26 +99,7 @@ function RequireBusiness() {
     );
   }
 
-  // Un admin de la plataforma no es miembro de ningún comercio; sin esta
-  // excepción, la única persona que puede dar de alta negocios sería también la
-  // única que no puede entrar.
-  if (!current) return isAdmin ? <AdminOnlyShell /> : <Onboarding />;
-  return <Outlet />;
-}
-
-/** Para el admin sin comercios: el panel de la plataforma y nada más. */
-function AdminOnlyShell() {
-  return (
-    <div className="min-h-screen">
-      <Admin />
-    </div>
-  );
-}
-
-/** El escalón de arriba de todo: dar de alta comercios. */
-function RequirePlatformAdmin() {
-  const { isAdmin } = useBusiness();
-  if (!isAdmin) return <Navigate to="/orders" replace />;
+  if (!current) return <Onboarding />;
   return <Outlet />;
 }
 

@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import { isPlatformAdmin } from '../lib/platform';
 import { useAuth } from './auth';
 
 export type Membership = {
@@ -23,8 +22,6 @@ type BusinessContextValue = {
    */
   error: string | null;
   memberships: Membership[];
-  /** Administra la plataforma, no un comercio. Ve el panel de alta de negocios. */
-  isAdmin: boolean;
   /** El comercio activo en el dashboard. Con uno solo, se elige automático. */
   current: Membership | null;
   setCurrent: (businessId: string) => void;
@@ -39,7 +36,6 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   async function fetchMemberships() {
     if (!session) {
@@ -75,7 +71,6 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
     setMemberships(rows);
     setCurrentId((prev) => prev ?? rows[0]?.business_id ?? null);
-    setIsAdmin(await isPlatformAdmin());
     setLoading(false);
   }
 
@@ -88,10 +83,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
   return (
     <BusinessContext.Provider
-      value={{
-        loading, error, memberships, isAdmin, current,
-        setCurrent: setCurrentId, refetch: fetchMemberships,
-      }}
+      value={{ loading, error, memberships, current, setCurrent: setCurrentId, refetch: fetchMemberships }}
     >
       {children}
     </BusinessContext.Provider>
