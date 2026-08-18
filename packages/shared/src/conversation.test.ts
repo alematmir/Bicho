@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUTTON_ASK_QUESTION, BUTTON_ORDER_NOW, CONVERSATION_STATES, decide,
+  INACTIVITY_TIMEOUT_MS, isConversationStale,
   looksLikeGreeting, looksLikeOrderIntent, MAX_FAILED_ATTEMPTS,
   type Action, type ConversationContext, type ConversationEnv, type ConversationState,
 } from './conversation';
@@ -266,6 +267,56 @@ describe('vuelta del cliente tras un tiempo', () => {
       { kind: 'text', body: 'hola' }, env());
 
     expect(d.nextContext.activeOrderId).toBe('order-9');
+  });
+});
+
+describe('pedido cerrado en el mismo hilo (sin esperar inactividad)', () => {
+  // whatsapp-webhook detecta que el pedido activo llegó a un estado terminal
+  // y, en vez de solo borrar `activeOrderId`, le pasa a decide() un evento
+  // `timeout` antes del mensaje real — mismo mecanismo que la inactividad,
+  // disparado a mano. Esto reproduce esa composición para que el contrato
+  // quede fijado acá, no solo en la Edge Function (que no tiene tests).
+  it('un saludo después reparte el saludo completo, no el link viejo', () => {
+    const trasElPedido = decide('LINK_SENT', ctx({ activeOrderId: 'order-4', failedAttempts: 1 }),
+      { kind: 'timeout' }, env());
+
+    const d = decide(trasElPedido.nextState, trasElPedido.nextContext,
+      { kind: 'text', body: 'hola' }, env());
+
+    expect(types(d.actions)).toEqual(['send_welcome']);
+    expect(d.nextState).toBe('AWAITING_ACTION');
+  });
+});
+
+describe('isConversationStale', () => {
+  const HACE_UNA_HORA = Date.now() - 60 * 60 * 1000;
+  const HACE_UN_MINUTO = Date.now() - 60 * 1000;
+
+  it('sin mensaje previo no hay nada que resetear', () => {
+    expect(isConversationStale('AWAITING_ACTION', ctx(), null, Date.now())).toBe(false);
+  });
+
+  it('en IDLE nunca está vieja: ya estamos en el principio', () => {
+    expect(isConversationStale('IDLE', ctx(), HACE_UNA_HORA, Date.now())).toBe(false);
+  });
+
+  it('pasado el umbral, sin pedido en curso, está vieja', () => {
+    expect(isConversationStale('LINK_SENT', ctx(), HACE_UNA_HORA, Date.now())).toBe(true);
+  });
+
+  it('todavía no pasó el umbral', () => {
+    expect(isConversationStale('LINK_SENT', ctx(), HACE_UN_MINUTO, Date.now())).toBe(false);
+  });
+
+  it('justo en el borde no cuenta (estrictamente mayor)', () => {
+    const now = Date.now();
+    expect(isConversationStale('LINK_SENT', ctx(), now - INACTIVITY_TIMEOUT_MS, now)).toBe(false);
+  });
+
+  it('con un pedido en curso nunca está vieja, aunque haga rato', () => {
+    expect(
+      isConversationStale('LINK_SENT', ctx({ activeOrderId: 'order-9' }), HACE_UNA_HORA, Date.now()),
+    ).toBe(false);
   });
 });
 

@@ -180,6 +180,51 @@ export function looksLikeGreeting(text: string): boolean {
 
 const EMPTY_CONTEXT: ConversationContext = { failedAttempts: 0 };
 
+/**
+ * Cuánto silencio hace falta para dar la conversación por terminada.
+ *
+ * Media hora es el punto donde el contexto ya se perdió de los dos lados: el
+ * cliente no se acuerda de qué botón le quedó pendiente, y reenviarle el link
+ * de hace un rato como si nada es más desconcertante que saludarlo de nuevo.
+ */
+export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
+ * Si la conversación quedó vieja y hay que volver a empezar.
+ *
+ * Se evalúa cuando llega un mensaje, no en segundo plano: a nadie le importa
+ * que el estado quede viejo mientras el cliente no escribe, solo que esté
+ * fresco cuando vuelve. Quien la llama traduce un `true` en un evento
+ * `timeout` pasado por decide() antes del mensaje real.
+ *
+ * Vive acá y no en decide() porque la máquina no mira el reloj: recibe eventos
+ * ya resueltos. Pero es la misma política de conversación, así que se testea y
+ * se lee junto con ella, no perdida adentro de una Edge Function.
+ *
+ * @param lastMessageAt epoch ms del último mensaje, o null si nunca hubo.
+ */
+export function isConversationStale(
+  state: ConversationState,
+  context: ConversationContext,
+  lastMessageAt: number | null,
+  now: number,
+): boolean {
+  // Sin conversación previa no hay nada viejo que limpiar. También cubre a la
+  // conversación recién creada por otro camino (venta asistida), que todavía
+  // no tiene un mensaje que fechar y no debería nacer vencida.
+  if (lastMessageAt === null) return false;
+
+  // En IDLE ya estamos en el principio: resetear no cambia nada.
+  if (state === 'IDLE') return false;
+
+  // Un pedido en curso desactiva la regla. Si todavía está esperando la
+  // comida, la conversación no está vieja aunque haga rato que no escriba: lo
+  // que quiere al volver es el estado de su pedido, no un saludo de cero.
+  if (context.activeOrderId) return false;
+
+  return now - lastMessageAt > INACTIVITY_TIMEOUT_MS;
+}
+
 /** Pasa a humano, avisa al dueño y limpia el contador. */
 function handoff(context: ConversationContext, reason: HandoffReason): Decision {
   return {
