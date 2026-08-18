@@ -27,6 +27,12 @@ import { fillTemplate, getTemplate, sendButtons, sendList, sendText } from "../_
 
 const VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") ?? "";
 const SHOP_BASE_URL = Deno.env.get("SHOP_BASE_URL") ?? "";
+const META_APP_SECRET = Deno.env.get("META_APP_SECRET") ?? "";
+// Secreto propio y acotado para la vía de depuración — no la service role key:
+// esa abre TODA la base, y acá solo hace falta demostrar "sos vos probando",
+// no privilegio de admin. Se define con
+// `npx supabase secrets set WHATSAPP_WEBHOOK_DEBUG_TOKEN=<valor>`.
+const DEBUG_TOKEN = Deno.env.get("WHATSAPP_WEBHOOK_DEBUG_TOKEN") ?? "";
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -46,6 +52,54 @@ function handleVerification(req: Request): Response {
     return new Response(challenge, { status: 200 });
   }
   return new Response("Forbidden", { status: 403 });
+}
+
+// -----------------------------------------------------------------------------
+// POST — verificación de firma. Sin esto, cualquiera con el phone_number_id
+// (no es secreto) podía forjar un webhook completo: crear/mover conversaciones
+// de cualquier cliente, y en algunos casos hacer que la función mande un
+// WhatsApp real a cualquier número desde el número del comercio. Mismo patrón
+// que mercadopago-webhook, con el header y el secreto que le corresponden a
+// Meta. Ver auditoría de seguridad del 18/8/2026, hallazgo C2.
+//
+// Firma (verificado contra developers.facebook.com/docs/graph-api/webhooks):
+//   X-Hub-Signature-256: "sha256=<hmac>"
+//   hmac = HMAC-SHA256(body crudo, META_APP_SECRET) en hex
+// -----------------------------------------------------------------------------
+async function hmacSha256Hex(message: string, secret: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifyMetaSignature(rawBody: string, header: string | null): Promise<boolean> {
+  if (!header || !META_APP_SECRET) return false;
+  const [scheme, hex] = header.split("=");
+  if (scheme !== "sha256" || !hex) return false;
+  const expected = await hmacSha256Hex(rawBody, META_APP_SECRET);
+  return timingSafeEqual(expected, hex);
+}
+
+/**
+ * Vía de depuración: un POST sintético con `X-Debug-Token: <DEBUG_TOKEN>`
+ * (no con la firma de Meta, que no se puede forjar para probar cosas propias)
+ * pasa igual, y encima recibe el `diag` completo en la respuesta. Es lo que
+ * documenta la memoria "probar el webhook de WhatsApp sin molestar al
+ * usuario".
+ */
+function isDebugRequest(req: Request): boolean {
+  const token = req.headers.get("x-debug-token") ?? "";
+  return token.length > 0 && DEBUG_TOKEN.length > 0 && token === DEBUG_TOKEN;
 }
 
 // -----------------------------------------------------------------------------
@@ -271,18 +325,37 @@ type WhatsAppWebhookBody = {
 };
 
 async function handleIncoming(req: Request): Promise<Response> {
-  // TEMPORAL: diagnóstico acumulado, devuelto en la respuesta (que Meta
-  // ignora, pero curl no) para depurar sin depender del panel de logs.
-  const diag: unknown[] = [];
+  // Body crudo primero: el HMAC de la firma se calcula sobre los bytes tal
+  // cual llegaron, no sobre el objeto ya parseado.
+  const rawBody = await req.text();
+  const debug = isDebugRequest(req);
+  const validSignature = await verifyMetaSignature(rawBody, req.headers.get("x-hub-signature-256"));
+  if (!validSignature && !debug) {
+    console.error("firma inválida en whatsapp-webhook");
+    return new Response("Forbidden", { status: 403 });
+  }
 
-  const body: WhatsAppWebhookBody = await req.json();
+  // El diagnóstico solo viaja en la respuesta para quien se autenticó con la
+  // service role key (vos, probando). Para todo lo demás —Meta de verdad
+  // incluido, que lo ignora igual— la respuesta es siempre la misma, sin
+  // detalles internos.
+  const diag: unknown[] = [];
+  const respond = (extra?: Record<string, unknown>) =>
+    debug ? Response.json({ diag, ...extra }) : Response.json({ ok: true });
+
+  let body: WhatsAppWebhookBody;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return respond({ note: "body inválido" });
+  }
   const value = body.entry?.[0]?.changes?.[0]?.value;
   const phoneNumberId = value?.metadata?.phone_number_id;
-  if (!phoneNumberId) return Response.json({ diag, note: "sin phone_number_id" });
+  if (!phoneNumberId) return respond({ note: "sin phone_number_id" });
 
   const business = await resolveBusiness(phoneNumberId);
   diag.push({ step: "resolveBusiness", phoneNumberId, business });
-  if (!business) return Response.json({ diag, note: "sin comercio asociado a ese número" });
+  if (!business) return respond({ note: "sin comercio asociado a ese número" });
 
   for (const msg of value?.messages ?? []) {
     const { error: dupError } = await supabaseAdmin
@@ -299,15 +372,6 @@ async function handleIncoming(req: Request): Promise<Response> {
       const phoneE164 = toE164(from);
       const customerId = await resolveCustomer(business.businessId, phoneE164);
       diag.push({ step: "resolveCustomer", phoneE164, customerId });
-
-      // TEMPORAL: reset manual para poder reprobar el flujo desde IDLE sin
-      // acceso directo a la base. Sacar una vez que el flujo esté confirmado.
-      if (msg.type === "text" && msg.text?.body?.trim() === "!reset") {
-        await supabaseAdmin.from("conversations").delete()
-          .eq("business_id", business.businessId).eq("customer_id", customerId);
-        diag.push({ step: "reset de depuración aplicado" });
-        return Response.json({ diag });
-      }
 
       const { data: existingConv, error: convError } = await supabaseAdmin
         .from("conversations")
@@ -414,7 +478,7 @@ async function handleIncoming(req: Request): Promise<Response> {
     }
   }
 
-  return Response.json({ diag });
+  return respond();
 }
 
 async function countActiveBranches(businessId: string): Promise<number> {

@@ -1,6 +1,6 @@
 // Pedidos: numeración, snapshots de precio, rollups del cliente y restricciones.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { freshDb, ID, type Db } from './helpers/db';
+import { asUser, freshDb, ID, type Db } from './helpers/db';
 
 let db: Db;
 beforeAll(async () => { db = await freshDb(); });
@@ -147,6 +147,48 @@ describe('clientes', () => {
   it('admite el mismo teléfono en comercios distintos', async () => {
     await db.exec(`insert into public.customers (business_id, phone_e164)
                    values ('${ID.businessB}','+5491155554444')`);
+  });
+});
+
+describe('RLS: nadie borra un pedido', () => {
+  // Hallazgo de la auditoría de seguridad del 18/8/2026: orders_member_all y
+  // order_items_member_all eran "for all" (incluía DELETE), así que un
+  // empleado podía borrar un pedido PAGADO y el pago se iba con él en cascada.
+  // Sin política de DELETE, Postgres no tira error: el USING de la operación
+  // faltante se evalúa como `false`, así que el DELETE "tiene éxito" pero no
+  // afecta ninguna fila. Por eso se verifica affectedRows/rowCount, no un throw.
+  it('un empleado no puede borrar un pedido de su propio comercio', async () => {
+    await nuevoPedido(ID.businessA, ID.branchA, ID.customerA, 5000);
+    const antes = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.orders where business_id='${ID.businessA}'`);
+
+    const r = await asUser(
+      db, ID.staffA, `delete from public.orders where business_id='${ID.businessA}'`);
+    expect(r.affectedRows ?? r.rowCount).toBe(0);
+
+    const despues = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.orders where business_id='${ID.businessA}'`);
+    expect(despues.rows[0].n).toBe(antes.rows[0].n);
+  });
+
+  it('ni siquiera el dueño puede borrar un pedido: llega a CANCELLED, no desaparece', async () => {
+    await nuevoPedido(ID.businessA, ID.branchA, ID.customerA, 5000);
+    const antes = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.orders where business_id='${ID.businessA}'`);
+
+    const r = await asUser(
+      db, ID.userA, `delete from public.orders where business_id='${ID.businessA}'`);
+    expect(r.affectedRows ?? r.rowCount).toBe(0);
+
+    const despues = await db.query<{ n: number }>(
+      `select count(*)::int as n from public.orders where business_id='${ID.businessA}'`);
+    expect(despues.rows[0].n).toBe(antes.rows[0].n);
+  });
+
+  it('sigue pudiendo ver y actualizar sus propios pedidos (no se rompió SELECT/UPDATE)', async () => {
+    const r = await asUser(db, ID.userA,
+      `select id from public.orders where business_id='${ID.businessA}' limit 1`);
+    expect(r.rows.length).toBeGreaterThan(0);
   });
 });
 

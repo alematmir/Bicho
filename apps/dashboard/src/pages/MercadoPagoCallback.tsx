@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { completeMercadoPagoConnection, ConnectMercadoPagoError } from '../lib/mercadopago';
+import { completeMercadoPagoConnection, ConnectMercadoPagoError, consumeOAuthState } from '../lib/mercadopago';
 
 /**
  * A esta ruta redirige Mercado Pago después de que el dueño autoriza la
@@ -14,7 +14,7 @@ export function MercadoPagoCallback() {
 
   useEffect(() => {
     const code = params.get('code');
-    const businessId = params.get('state'); // el business_id viaja acá, no en el path
+    const rawState = params.get('state'); // business_id + nonce, ver mercadoPagoAuthorizationUrl()
     const mpError = params.get('error');
 
     if (mpError) {
@@ -26,8 +26,20 @@ export function MercadoPagoCallback() {
       setError(detail ? `Mercado Pago rechazó la conexión: ${detail} (${mpError})` : `Mercado Pago rechazó la conexión: ${mpError}`);
       return;
     }
-    if (!code || !businessId) {
+    if (!code || !rawState) {
       setError('Faltan datos en la respuesta de Mercado Pago.');
+      return;
+    }
+
+    // Si el state no coincide con el que esta misma pestaña generó, el flujo
+    // no es de fiar (pudo iniciarlo otra persona, con su propio code) — no se
+    // completa la conexión aunque el resto de los datos parezca válido.
+    const businessId = consumeOAuthState(rawState);
+    if (!businessId) {
+      setError(
+        'Este enlace de conexión no es válido o ya se usó. Volvé a "Mercado Pago" en el menú y ' +
+          'tocá "Conectar con Mercado Pago" de nuevo.',
+      );
       return;
     }
 

@@ -20,18 +20,50 @@ export function mercadoPagoCallbackUrl(): string {
   return `${window.location.origin}/oauth/mercadopago/callback`;
 }
 
+// `state` es la única defensa contra CSRF en este flujo — sin un nonce
+// impredecible atado a ESTA pestaña, cualquiera podía armar un link con SU
+// PROPIO `code` de Mercado Pago (autorizado con una cuenta propia) y el
+// business_id de otro comercio (dato público, se lee en la tienda), mandarlo
+// por phishing, y lograr que el dueño —con sesión ya abierta— conectara sin
+// darse cuenta la cuenta del atacante como la que cobra sus pedidos. Ver
+// auditoría de seguridad del 18/8/2026, hallazgo C3.
+const OAUTH_STATE_KEY = 'mp_oauth_state';
+
 export function mercadoPagoAuthorizationUrl(businessId: string): string {
   if (!MP_CLIENT_ID) {
     throw new Error('Falta VITE_MP_CLIENT_ID en apps/dashboard/.env.local');
   }
+  const nonce = crypto.randomUUID();
+  const state = `${businessId}.${nonce}`;
+  // sessionStorage y no localStorage: de un solo uso, por pestaña, y se
+  // pierde solo si esta misma pestaña nunca vuelve — que es justo cuándo no
+  // debería aceptarse ningún callback.
+  sessionStorage.setItem(OAUTH_STATE_KEY, state);
+
   const params = new URLSearchParams({
     client_id: MP_CLIENT_ID,
     response_type: 'code',
     platform_id: 'mp',
-    state: businessId,
+    state,
     redirect_uri: mercadoPagoCallbackUrl(),
   });
   return `https://auth.mercadopago.com/authorization?${params}`;
+}
+
+/**
+ * Valida que el `state` que volvió de Mercado Pago sea EXACTAMENTE el que
+ * esta pestaña generó al iniciar el flujo, y lo consume (de un solo uso). Si
+ * no coincide —o no hay nada guardado—, el flujo pudo haber sido iniciado por
+ * otra persona: nunca hay que completarlo. Devuelve el business_id solo
+ * cuando la validación pasa.
+ */
+export function consumeOAuthState(state: string): string | null {
+  const saved = sessionStorage.getItem(OAUTH_STATE_KEY);
+  sessionStorage.removeItem(OAUTH_STATE_KEY);
+  if (!saved || saved !== state) return null;
+
+  const separator = state.lastIndexOf('.');
+  return separator > 0 ? state.slice(0, separator) : null;
 }
 
 export async function fetchMpAccount(businessId: string): Promise<MpAccount | null> {

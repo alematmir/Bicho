@@ -42,8 +42,12 @@ const rest = (path, init = {}) =>
     },
   });
 
-// Tablas que anon debe poder consultar (aunque devuelvan vacío).
-const LEGIBLES = ['businesses', 'branches', 'categories', 'products',
+// Tablas que anon debe poder consultar (aunque devuelvan vacío) con `select=*`.
+// businesses queda afuera de esta lista a propósito: desde
+// 20260818001200_businesses_anon_columns.sql anon solo tiene grant sobre un
+// subconjunto de columnas, así que `select=*` ahí falla por diseño — se
+// verifica aparte, con la lista de columnas que sí debe poder leer.
+const LEGIBLES = ['branches', 'categories', 'products',
                   'product_variants', 'option_groups', 'options', 'inventory'];
 
 // Tablas sin ninguna política para anon: RLS las filtra, pero la consulta debe
@@ -53,6 +57,10 @@ const FILTRADAS = ['orders', 'order_items', 'customers', 'payments',
 
 console.log(`\nProyecto: ${URL_BASE}\n`);
 console.log('Privilegios y exposición del esquema:');
+
+const businessesPublicas = await rest('businesses?select=id,slug,name,logo_url,currency,brand_primary,brand_secondary&limit=1');
+if (businessesPublicas.status === 200) ok('businesses (columnas públicas) responde 200');
+else bad('businesses (columnas públicas) respondió ' + businessesPublicas.status, (await businessesPublicas.text()).slice(0, 200));
 
 for (const table of [...LEGIBLES, ...FILTRADAS]) {
   const res = await rest(`${table}?select=*&limit=1`);
@@ -94,6 +102,56 @@ for (const [table, row] of escrituras) {
     bad(`anon llegó más lejos de lo esperado en ${table}`,
         `status ${res.status} code ${body.code ?? '-'} ${body.message ?? ''}`);
   }
+}
+
+console.log('\nRPC de service_role bloqueadas para anon:');
+// "revoke ... from public" NO le saca el EXECUTE a anon/authenticated: Supabase
+// se lo otorga directo, no vía el pseudo-rol PUBLIC. Detectado el 18/8/2026
+// probando en vivo — ver la memoria "revoke from public no alcanza en
+// Supabase". Sin este chequeo, una función security definer nueva puede
+// quedar invocable por cualquiera sin que ningún test local lo note: el
+// harness de PGlite solo replica default privileges para TABLAS, no para
+// funciones.
+const rpc = (name, body) =>
+  fetch(`${URL_BASE}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: { apikey: ANON, Authorization: `Bearer ${ANON}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+const rpcsBloqueadas = [
+  ['vault_read_secret', { p_id: '00000000-0000-0000-0000-000000000000' }],
+  ['vault_store_secret', { p_secret: 'x', p_name: 'x' }],
+  ['create_order_atomic', {
+    p_business_id: '00000000-0000-0000-0000-000000000000',
+    p_branch_id: '00000000-0000-0000-0000-000000000000',
+    p_customer_phone: '+5491100000000', p_customer_name: 'x',
+    p_fulfillment_type: 'pickup', p_delivery_address: null, p_customer_notes: null,
+    p_items: [], p_subtotal_cents: 1, p_delivery_fee_cents: 0, p_total_cents: 1,
+  }],
+  ['decrement_stock_for_order', { p_order_id: '00000000-0000-0000-0000-000000000000' }],
+  ['check_rate_limit', { p_key: 'verify-remote', p_max: 1, p_window: '60 seconds' }],
+];
+
+for (const [name, body] of rpcsBloqueadas) {
+  const res = await rpc(name, body);
+  const responseBody = await res.json().catch(() => ({}));
+  if (res.status === 401 && responseBody.code === '42501') {
+    ok(`anon no puede llamar ${name}()`);
+  } else {
+    bad(`anon llegó más lejos de lo esperado en ${name}()`,
+        `status ${res.status} code ${responseBody.code ?? '-'} ${responseBody.message ?? ''}`);
+  }
+}
+
+console.log('\nColumnas internas de businesses ocultas para anon:');
+
+const columnasInternas = await rest('businesses?select=settings,commission_bps,order_seq&limit=1');
+if (columnasInternas.status === 401 || columnasInternas.status === 403) {
+  ok('anon no puede leer settings/commission_bps/order_seq');
+} else {
+  bad('anon leyó columnas internas de businesses',
+      `status ${columnasInternas.status}: ${(await columnasInternas.text()).slice(0, 200)}`);
 }
 
 console.log('\nEl esquema aplicado coincide con las migraciones:');

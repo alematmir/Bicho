@@ -98,4 +98,25 @@ describe('acceso anónimo (la tienda no tiene sesión)', () => {
     expect(await countAsAnon(db, 'businesses')).toBe(1);
     await db.exec(`update public.businesses set is_active = true where id = '${ID.businessB}'`);
   });
+
+  // Hallazgo de la auditoría de seguridad del 18/8/2026: RLS filtra filas
+  // (is_active), no columnas — sin un grant acotado, cualquiera con la anon
+  // key podía pedir settings/commission_bps/order_seq de cualquier comercio.
+  it.each(['settings', 'commission_bps', 'order_seq'])(
+    'no puede leer businesses.%s',
+    async (column) => {
+      await expect(
+        asAnon(db, `select ${column} from public.businesses where id='${ID.businessA}'`),
+      ).rejects.toThrow(/permission denied/);
+    },
+  );
+
+  it('sigue pudiendo leer las columnas públicas de businesses', async () => {
+    const r = await asAnon(
+      db,
+      `select slug, name, logo_url, currency, brand_primary from public.businesses
+        where id='${ID.businessA}'`,
+    );
+    expect(r.rows).toHaveLength(1);
+  });
 });

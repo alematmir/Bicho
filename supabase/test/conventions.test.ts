@@ -6,12 +6,15 @@ import { freshDb, type Db } from './helpers/db';
 let db: Db;
 beforeAll(async () => { db = await freshDb(); });
 
-// Las dos únicas tablas que no son de un comercio:
+// Las tablas que no son de un comercio:
 //   businesses      → es el tenant en sí; su clave es id, no business_id.
 //   platform_admins → está por ENCIMA de los comercios. Es quién puede dar de
 //                     alta negocios en la plataforma, y por eso justamente no
 //                     pertenece a ninguno.
-const SIN_BUSINESS_ID = ['businesses', 'platform_admins'];
+//   rate_limits     → contador de abuso por clave arbitraria (ip, teléfono),
+//                     cruza comercios a propósito: un mismo atacante pegándole
+//                     a dos comercios distintos tiene que frenar igual.
+const SIN_BUSINESS_ID = ['businesses', 'platform_admins', 'rate_limits'];
 
 describe('seguridad', () => {
   it('todas las tablas de public tienen RLS activo', async () => {
@@ -26,7 +29,7 @@ describe('seguridad', () => {
   it('ninguna tabla con RLS quedó sin políticas ni marcada como interna', async () => {
     // Sin políticas y sin ser deliberadamente service_role-only = tabla muerta
     // o agujero. Estas son las que a propósito solo toca el backend.
-    const soloBackend = ['webhook_events'];
+    const soloBackend = ['rate_limits', 'webhook_events'];
     const r = await db.query<{ relname: string }>(`
       select c.relname from pg_class c
         join pg_namespace n on n.oid = c.relnamespace
@@ -104,7 +107,8 @@ describe('dinero', () => {
 describe('trazabilidad', () => {
   it('todas las tablas tienen created_at', async () => {
     // Los logs append-only usan occurred_at/received_at en su lugar.
-    const conOtroSello = ['customer_events', 'order_events', 'messages', 'webhook_events'];
+    // rate_limits no tiene ningún sello: expires_at cumple ese rol.
+    const conOtroSello = ['customer_events', 'order_events', 'messages', 'rate_limits', 'webhook_events'];
     const r = await db.query<{ table_name: string }>(`
       select t.table_name from information_schema.tables t
        where t.table_schema = 'public' and t.table_type = 'BASE TABLE'

@@ -16,6 +16,7 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { toE164 } from "../../../packages/shared/src/phone.ts";
 import { isInStock } from "../../../packages/shared/src/inventory.ts";
+import { clientIp, withinRateLimit } from "../_shared/rate_limit.ts";
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -53,10 +54,31 @@ function fail(message: string, status = 400) {
   return Response.json({ error: message }, { status: 200, headers: CORS_HEADERS });
 }
 
+// Sin ningún session_token que exigir (checkout de invitado, a propósito —
+// ver docs/00-arquitectura.md decisión 9), el único freno contra un script
+// creando pedidos sin parar es un límite de tasa. Dos claves distintas: por
+// IP (frena a quien golpea rápido desde un mismo origen) y por teléfono
+// (frena el abuso de "poner el número de otra persona" aunque el atacante
+// rote de IP). Ver auditoría de seguridad del 18/8/2026, hallazgo C1.
+const IP_RATE_LIMIT = { max: 8, windowSeconds: 10 * 60 };
+const PHONE_RATE_LIMIT = { max: 5, windowSeconds: 60 * 60 };
+
+// Ningún cliente real pide 500 hamburguesas. Un tope generoso alcanza para
+// frenar carritos armados para inflar total_cents o forzar cómputo de más en
+// la validación de adicionales, sin molestar a nadie real.
+const MAX_QTY_PER_ITEM = 50;
+const MAX_ITEMS_PER_ORDER = 50;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+  }
+
+  // Antes de tocar el body siquiera: si esta IP ya viene abusando, cortar acá
+  // es lo más barato posible (nada de parsear ni de pegarle a la base).
+  if (!(await withinRateLimit(`create-order:ip:${clientIp(req)}`, IP_RATE_LIMIT.max, IP_RATE_LIMIT.windowSeconds))) {
+    return fail("Demasiados pedidos en poco tiempo. Esperá unos minutos e intentá de nuevo.", 429);
   }
 
   let input: Input;
@@ -69,6 +91,7 @@ Deno.serve(async (req) => {
   // --- Validación de forma ---------------------------------------------------
   if (!input.business_slug || !input.branch_id) return fail("Falta el comercio o la sucursal");
   if (!Array.isArray(input.items) || input.items.length === 0) return fail("El carrito está vacío");
+  if (input.items.length > MAX_ITEMS_PER_ORDER) return fail("Hay demasiados productos distintos en el carrito");
   if (!["delivery", "pickup"].includes(input.fulfillment_type)) {
     return fail("Tipo de entrega inválido");
   }
@@ -76,7 +99,7 @@ Deno.serve(async (req) => {
     return fail("Elegí un método de pago");
   }
   for (const item of input.items) {
-    if (!item.product_id || !Number.isInteger(item.qty) || item.qty <= 0) {
+    if (!item.product_id || !Number.isInteger(item.qty) || item.qty <= 0 || item.qty > MAX_QTY_PER_ITEM) {
       return fail("Hay un ítem del carrito con datos inválidos");
     }
   }
@@ -86,6 +109,13 @@ Deno.serve(async (req) => {
     phone = toE164(input.customer?.phone ?? "");
   } catch {
     return fail("El teléfono no es válido");
+  }
+
+  // Segundo freno, por teléfono: cubre al mismo atacante rotando de IP, y de
+  // paso limita cuántos pedidos falsos puede sufrir un número de un tercero
+  // que alguien haya usado sin permiso.
+  if (!(await withinRateLimit(`create-order:phone:${phone}`, PHONE_RATE_LIMIT.max, PHONE_RATE_LIMIT.windowSeconds))) {
+    return fail("Demasiados pedidos con este número en poco tiempo. Esperá unos minutos e intentá de nuevo.", 429);
   }
 
   // --- Comercio y sucursal -----------------------------------------------------
