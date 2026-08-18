@@ -1,3 +1,4 @@
+export * from './color';
 export * from './orders';
 export * from './money';
 export * from './phone';

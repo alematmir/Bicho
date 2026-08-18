@@ -19,9 +19,10 @@ import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { toE164, toWhatsAppSendFormat } from "../../../packages/shared/src/phone.ts";
 import {
-  decide, type Action, type ConversationContext, type ConversationEnv,
-  type ConversationState, type InboundEvent,
+  decide, isConversationStale, type Action, type ConversationContext,
+  type ConversationEnv, type ConversationState, type InboundEvent,
 } from "../../../packages/shared/src/conversation.ts";
+import { templateKeyFor } from "../../../packages/shared/src/orders.ts";
 import { fillTemplate, getTemplate, sendButtons, sendList, sendText } from "../_shared/whatsapp.ts";
 
 const VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") ?? "";
@@ -128,11 +129,29 @@ async function execute(action: Action, ctx: ExecCtx): Promise<void> {
         .eq("id", action.orderId)
         .maybeSingle();
 
-      const body = order
-        ? fillTemplate(STATUS_TEXT[order.status] ?? "Tu pedido #{{order_number}} está en proceso.",
-            { order_number: String(order.number) })
-        : "No encontramos ese pedido.";
-      await sendText(ctx.phoneNumberId, to, body);
+      if (!order) {
+        await sendText(ctx.phoneNumberId, to, "No encontramos ese pedido.");
+        return;
+      }
+
+      // Si el comercio editó el texto de este estado en Configuración →
+      // Mensajes, se usa ese. Antes esto leía siempre de STATUS_TEXT y el
+      // dueño cambiaba "pedido listo" sin entender por qué la respuesta a
+      // "¿dónde está mi pedido?" le seguía saliendo con el texto viejo.
+      //
+      // STATUS_TEXT queda como respaldo para los estados que NO tienen
+      // plantilla porque nunca se avisan por sí solos (CREATED, DELIVERED,
+      // PAYMENT_EXPIRED...): ahí no hay nada que el comercio pueda editar,
+      // pero el cliente igual puede preguntar.
+      const templateKey = templateKeyFor(order.status);
+      const custom = templateKey ? await getTemplate(ctx.businessId, templateKey) : "";
+      const source = custom || STATUS_TEXT[order.status] ||
+        "Tu pedido #{{order_number}} está en proceso.";
+
+      await sendText(
+        ctx.phoneNumberId, to,
+        fillTemplate(source, { order_number: String(order.number), business: ctx.businessName }),
+      );
       return;
     }
 
@@ -157,6 +176,10 @@ async function execute(action: Action, ctx: ExecCtx): Promise<void> {
   }
 }
 
+// Respaldo para los estados que no tienen plantilla editable, porque nunca se
+// avisan solos. Los que SÍ avisan (PAID, PREPARING, READY, OUT_FOR_DELIVERY,
+// PAYMENT_FAILED, CANCELLED) salen de message_templates y los edita el dueño
+// desde el dashboard — ver la clave que devuelve templateKeyFor().
 const STATUS_TEXT: Record<string, string> = {
   CREATED: "Tu pedido #{{order_number}} todavía no se confirmó.",
   PENDING_PAYMENT: "Tu pedido #{{order_number}} está esperando el pago.",
@@ -288,26 +311,56 @@ async function handleIncoming(req: Request): Promise<Response> {
 
       const { data: existingConv, error: convError } = await supabaseAdmin
         .from("conversations")
-        .select("state, context")
+        .select("state, context, last_message_at")
         .eq("business_id", business.businessId)
         .eq("customer_id", customerId)
         .maybeSingle();
       diag.push({ step: "conversación existente", existingConv, convError });
 
-      const state: ConversationState = existingConv?.state ?? "IDLE";
-      const context: ConversationContext = existingConv?.context ?? { failedAttempts: 0 };
+      let state: ConversationState = existingConv?.state ?? "IDLE";
+      let context: ConversationContext = existingConv?.context ?? { failedAttempts: 0 };
 
-      // Un pedido en estado terminal (entregado o cancelado) deja de ser "el
-      // pedido activo": si no, la máquina queda repitiendo su estado para
-      // siempre y nunca vuelve a ofrecer arrancar uno nuevo. La máquina en sí
-      // (decide()) no consulta la base — este chequeo vive acá, del lado de
-      // quien sí puede.
+      // Suelta el hilo entero y vuelve a IDLE — mismo mecanismo que usa un
+      // cron de inactividad, disparado a mano acá porque no hay uno corriendo
+      // (docs/TODO.md). decide() ignora env para `timeout`: no hay nada que
+      // consultar para volver a cero.
+      const resetToIdle = () => {
+        const reset = decide(state, context, { kind: "timeout" }, {
+          branchCount: 0, allowsInquiry: false, sessionValid: false,
+        });
+        state = reset.nextState;
+        context = reset.nextContext;
+      };
+
+      // Un pedido en estado terminal (entregado o cancelado) cierra el hilo
+      // que lo venía siguiendo. No alcanza con borrar `activeOrderId` del
+      // contexto: si la conversación se queda en LINK_SENT, un "hola" cae en
+      // esa rama y solo reenvía el link viejo en silencio — el cliente lo lee
+      // como si nada hubiera pasado, en vez de recibir un saludo de cero. La
+      // máquina en sí (decide()) no consulta la base — este chequeo vive acá,
+      // del lado de quien sí puede.
       if (context.activeOrderId) {
         const { data: activeOrder } = await supabaseAdmin
           .from("orders").select("status").eq("id", context.activeOrderId).maybeSingle();
         if (!activeOrder || activeOrder.status === "DELIVERED" || activeOrder.status === "CANCELLED") {
-          delete context.activeOrderId;
+          resetToIdle();
+          diag.push({ step: "pedido cerrado → reset", state });
         }
+      }
+
+      // Inactividad, evaluada al llegar el mensaje: no hay (todavía) un cron
+      // que dispare `timeout` en segundo plano (docs/TODO.md, sin hacer). En
+      // vez de eso, si isConversationStale() dice que ya pasó bastante desde
+      // el último mensaje, el mensaje que acaba de llegar primero atraviesa
+      // ese evento (que decide() ya sabe resolver a IDLE) antes de procesarse
+      // como el evento real — así el cliente que vuelve al otro día recibe el
+      // saludo completo en vez del link viejo.
+      const lastMessageAt = existingConv?.last_message_at
+        ? Date.parse(existingConv.last_message_at)
+        : null;
+      if (isConversationStale(state, context, lastMessageAt, Date.now())) {
+        resetToIdle();
+        diag.push({ step: "inactividad → reset", state });
       }
 
       const env: ConversationEnv = {
@@ -334,10 +387,23 @@ async function handleIncoming(req: Request): Promise<Response> {
         }
       }
 
+      // `mode` no es lo mismo que `state`: state es dónde está la máquina,
+      // mode es quién contesta. Hasta acá solo se guardaba el primero, así que
+      // una conversación derivada quedaba marcada como atendida por el bot y
+      // el dashboard no tenía cómo saber que alguien estaba esperando a una
+      // persona. Ahora los dos se escriben juntos.
+      const isHuman = decision.nextState === "HUMAN";
       const { error: upsertError } = await supabaseAdmin.from("conversations").upsert(
         {
           business_id: business.businessId, customer_id: customerId,
           state: decision.nextState, context: decision.nextContext,
+          mode: isHuman ? "human" : "bot",
+          // Marca el momento en que dejó de atender el bot. Si ya venía en
+          // modo humano no se pisa: lo que importa es hace cuánto espera.
+          ...(isHuman && existingConv?.state !== "HUMAN"
+            ? { human_taken_at: new Date().toISOString() }
+            : {}),
+          ...(isHuman ? {} : { human_taken_at: null, assigned_to: null }),
           last_message_at: new Date().toISOString(),
         },
         { onConflict: "business_id,customer_id" },

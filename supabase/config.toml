@@ -457,6 +457,12 @@ entrypoint = "./functions/vault-selftest/index.ts"
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/vault-selftest/*.html" ]
 
+[functions.manage-staff]
+enabled = true
+verify_jwt = false
+import_map = "./functions/manage-staff/deno.json"
+entrypoint = "./functions/manage-staff/index.ts"
+
 [functions.connect-mercadopago]
 enabled = true
 verify_jwt = false

@@ -19,6 +19,8 @@ export const ID = {
   businessB: '1b1b1b1b-1b1b-1b1b-1b1b-1b1b1b1b1b1b',
   userA:     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   userB:     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+  /** Empleado del comercio A. Miembro, pero no dueño. */
+  staffA:    'a5a5a5a5-a5a5-a5a5-a5a5-a5a5a5a5a5a5',
   branchA:   '22222222-2222-2222-2222-222222222222',
   branchB:   '2b2b2b2b-2b2b-2b2b-2b2b-2b2b2b2b2b2b',
   customerA: '33333333-3333-3333-3333-333333333333',
@@ -50,6 +52,16 @@ export async function freshDb(): Promise<Db> {
     do $$ begin create role authenticated; exception when duplicate_object then null; end $$;
     do $$ begin create role service_role;  exception when duplicate_object then null; end $$;
 
+    -- Los privilegios se conceden por DEFAULT PRIVILEGES, antes de correr las
+    -- migraciones, igual que hace Supabase. Concederlos después, con un
+    -- "grant all on all tables", pisaría cualquier revoke que una migración
+    -- haya hecho a propósito — como el de notifications, que acota el UPDATE a
+    -- la columna read_at — y los tests dejarían de probar lo que pasa en vivo.
+    alter default privileges in schema public
+      grant all on tables to anon, authenticated;
+    alter default privileges in schema public
+      grant all on sequences to anon, authenticated;
+
     -- Stub de Supabase Vault: la extensión real (pgsodium) es propia del
     -- entorno hospedado, no existe en un Postgres común. Esto imita la misma
     -- forma (vault.create_secret(), vault.decrypted_secrets con
@@ -73,6 +85,27 @@ export async function freshDb(): Promise<Db> {
     $$;
     create or replace view vault.decrypted_secrets as
       select id, secret as decrypted_secret, name from vault.secrets;
+
+    -- Stub de Supabase Storage, por el mismo motivo que el de Vault: el esquema
+    -- storage lo crea el entorno hospedado y no existe en un Postgres común.
+    -- Con la forma alcanza para probar NUESTRAS policies del bucket
+    -- business-assets (ver 20260818000100_branding.sql): que un comercio no
+    -- pueda escribir en la carpeta de otro.
+    create schema if not exists storage;
+    create table if not exists storage.buckets (
+      id text primary key,
+      name text not null,
+      public boolean not null default false,
+      created_at timestamptz not null default now()
+    );
+    create table if not exists storage.objects (
+      id uuid primary key default gen_random_uuid(),
+      bucket_id text not null references storage.buckets(id),
+      name text not null,
+      owner uuid,
+      created_at timestamptz not null default now()
+    );
+    alter table storage.objects enable row level security;
   `);
 
   for (const file of readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort()) {
@@ -81,8 +114,8 @@ export async function freshDb(): Promise<Db> {
 
   await db.exec(`
     grant usage on schema public to anon, authenticated;
-    grant all on all tables in schema public to anon, authenticated;
-    grant all on all sequences in schema public to anon, authenticated;
+    grant usage on schema storage to anon, authenticated;
+    grant all on all tables in schema storage to anon, authenticated;
   `);
 
   await seed(db);
@@ -92,7 +125,7 @@ export async function freshDb(): Promise<Db> {
 /** Dos comercios con datos propios: sin eso no se puede probar el aislamiento. */
 async function seed(db: Db) {
   await db.exec(`
-    insert into auth.users (id) values ('${ID.userA}'), ('${ID.userB}');
+    insert into auth.users (id) values ('${ID.userA}'), ('${ID.userB}'), ('${ID.staffA}');
 
     insert into public.businesses (id, slug, name) values
       ('${ID.businessA}', 'ruddys', 'Ruddys'),
@@ -100,7 +133,8 @@ async function seed(db: Db) {
 
     insert into public.business_users (business_id, user_id, role) values
       ('${ID.businessA}', '${ID.userA}', 'owner'),
-      ('${ID.businessB}', '${ID.userB}', 'owner');
+      ('${ID.businessB}', '${ID.userB}', 'owner'),
+      ('${ID.businessA}', '${ID.staffA}', 'staff');
 
     insert into public.branches (id, business_id, name) values
       ('${ID.branchA}', '${ID.businessA}', 'Centro'),

@@ -47,10 +47,16 @@ describe('multi-tenancy', () => {
   });
 
   it('business_id nunca es nullable en tablas de dominio', async () => {
+    // Solo BASE TABLE, igual que el test de arriba: una vista siempre reporta
+    // sus columnas como nullable porque no arrastra las restricciones de la
+    // tabla de abajo, y eso no dice nada sobre si el dato puede faltar.
     const r = await db.query<{ table_name: string }>(`
-      select table_name from information_schema.columns
-       where table_schema = 'public' and column_name = 'business_id'
-         and is_nullable = 'YES'
+      select c.table_name from information_schema.columns c
+       join information_schema.tables t
+         on t.table_schema = c.table_schema and t.table_name = c.table_name
+       where c.table_schema = 'public' and c.column_name = 'business_id'
+         and c.is_nullable = 'YES'
+         and t.table_type = 'BASE TABLE'
        order by 1`);
     // Dos excepciones deliberadas:
     //   message_templates → NULL = plantilla por defecto de la plataforma, que
