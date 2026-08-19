@@ -2,7 +2,7 @@ import { boardActions, formatArs, formatForDisplay, type OrderStatus } from '@bi
 import type { OrderRow } from '../../lib/orders';
 import type { TransferAction } from './OrderCard';
 import {
-  customerLabel, itemsSummary, PAYMENT_LABEL, placedAtLabel, STATUS_LABEL, STATUS_TONE,
+  actionLabel, customerLabel, itemsSummary, PAYMENT_LABEL, placedAtLabel, STATUS_LABEL, STATUS_TONE,
 } from './orderPresentation';
 
 type Props = {
@@ -123,7 +123,7 @@ export function List({ orders, onAdvance, onCancel, onShowTimeline, onTransferAc
                         onClick={() => onAdvance(order, next)}
                         className="whitespace-nowrap rounded-full bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700"
                       >
-                        {STATUS_LABEL[next]}
+                        {actionLabel(next)}
                       </button>
                     ))}
                     {canCancel && (

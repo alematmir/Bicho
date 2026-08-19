@@ -49,8 +49,16 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { key: 'PAID', label: STATUS_LABEL.PAID, statuses: ['PAID'] },
   { key: 'PREPARING', label: STATUS_LABEL.PREPARING, statuses: ['PREPARING'] },
   { key: 'READY', label: STATUS_LABEL.READY, statuses: ['READY'] },
-  { key: 'OUT_FOR_DELIVERY', label: STATUS_LABEL.OUT_FOR_DELIVERY, statuses: ['OUT_FOR_DELIVERY'] },
-  { key: 'DISPATCHED', label: STATUS_LABEL.DISPATCHED, statuses: ['DISPATCHED'] },
+  // OUT_FOR_DELIVERY y DISPATCHED son, para quien mira el tablero, el mismo
+  // paso: "se lo llevaron". Mostrarlos como dos columnas obligaba a un doble
+  // arrastre para una sola decisión real del comercio — se combinan en una
+  // sola, "Enviado". Internamente siguen siendo dos estados (uno dispara el
+  // WhatsApp "tu pedido está en camino", el otro deja al pedido listo para
+  // que el cadete lo confirme — ver packages/shared/src/orders.ts); soltar
+  // acá los recorre a los dos en cadena, mismo mecanismo que DELIVERED más
+  // abajo. El botón de la tarjeta (boardActions) sigue mostrando cada paso
+  // por separado si hace falta destrabarlo sin arrastrar.
+  { key: 'DISPATCHED', label: 'Enviado', statuses: ['OUT_FOR_DELIVERY', 'DISPATCHED'] },
   // DELIVERED (retiro en sucursal) y DELIVERY_CONFIRMED (delivery confirmado
   // por el cadete) son, para quien mira el tablero, la misma idea: "listo, se
   // terminó". Mostrarlos como dos columnas que dicen las dos "Entregado" era
@@ -76,6 +84,22 @@ export function isFromToday(iso: string): boolean {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   return new Date(iso) >= startOfToday;
+}
+
+/**
+ * La etiqueta del botón que avanza un pedido, para el único caso donde no es
+ * STATUS_LABEL tal cual: OUT_FOR_DELIVERY dice "Enviado" en el botón, aunque
+ * su propio STATUS_LABEL siga diciendo "En camino" (ese sigue haciendo falta
+ * para la Lista/Historial, si un pedido queda ahí a mitad de camino).
+ *
+ * El motivo es el mismo que fusionó la columna en BOARD_COLUMNS: para quien
+ * opera, "marcar en camino" y "marcar enviado" son la misma decisión. Tocar
+ * este botón hace las dos transiciones reales en cadena (Orders.tsx,
+ * handleAdvance) — el WhatsApp de "tu pedido está en camino" sale igual,
+ * como efecto de la primera, pero quien opera ve un solo paso.
+ */
+export function actionLabel(status: OrderStatus): string {
+  return status === 'OUT_FOR_DELIVERY' ? 'Enviado' : STATUS_LABEL[status];
 }
 
 /**

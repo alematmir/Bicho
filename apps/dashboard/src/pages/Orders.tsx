@@ -131,30 +131,57 @@ export function Orders() {
   }, [load]);
 
   /**
-   * READY → OUT_FOR_DELIVERY ("En camino") es el único momento en que se
-   * elige quién se lo lleva — ver 20260819000800_assign_cadete.sql. Pickup no
-   * pasa por acá nunca: READY → DELIVERED es directo y boardActions() ya
-   * filtra OUT_FOR_DELIVERY a `fulfillment_type === 'delivery'`.
+   * "Enviado", para quien opera, es una sola decisión — ver el comentario en
+   * BOARD_COLUMNS (orderPresentation.ts). Atrás son DOS transiciones reales
+   * (READY → OUT_FOR_DELIVERY → DISPATCHED): la primera manda el WhatsApp
+   * "tu pedido está en camino", la segunda deja al pedido listo para que el
+   * cadete lo confirme. markAsSent() hace las dos en cadena para que en el
+   * dashboard sea un solo tap o un solo arrastre.
    *
-   * Con un solo cadete activo se asigna solo, sin preguntar — no hay nada que
-   * elegir. Con más de uno, se abre el selector y esta función queda a medio
-   * camino hasta que AssignCadeteModal decida. Con cero, sigue como antes de
-   * que existieran los cadetes: sin asignar, el comercio lo entrega él mismo.
+   * assignedCadeteId se decide una sola vez, acá, porque es el único momento
+   * en que se elige quién se lo lleva — ver 20260819000800_assign_cadete.sql.
+   * Pickup no pasa por acá nunca: READY → DELIVERED es directo y
+   * boardActions() ya filtra OUT_FOR_DELIVERY a `fulfillment_type === 'delivery'`.
    */
+  async function markAsSent(order: OrderRow, assignedCadeteId: string | null) {
+    setActionError(null);
+    try {
+      await updateOrderStatus(order.id, 'OUT_FOR_DELIVERY', { assignedCadeteId });
+      await updateOrderStatus(order.id, 'DISPATCHED');
+      await load();
+    } catch (err) {
+      // El trigger de la base rechaza transiciones inválidas — si llega acá es
+      // porque dos personas tocaron el mismo pedido a la vez, o un bug. Si la
+      // primera transición sí llegó a pasar, el pedido queda en OUT_FOR_DELIVERY
+      // (el botón vuelve a ofrecer "Enviado" para reintentar el segundo tramo,
+      // sin volver a mandar el WhatsApp: notifyBestEffort ya no dispara en el
+      // reintento porque el trigger solo loguea/notifica en un cambio real de
+      // estado).
+      setActionError((err as Error).message);
+      await load();
+    }
+  }
+
   async function handleAdvance(order: OrderRow, next: OrderStatus) {
-    if (next === 'OUT_FOR_DELIVERY' && cadetes.length > 1) {
-      setAssigning(order);
+    if (next === 'OUT_FOR_DELIVERY') {
+      // Con al menos un cadete activo, siempre se abre el selector — aunque
+      // haya uno solo. Asignar en silencio sin mostrar nada era invisible:
+      // nadie veía DÓNDE se elegía el cadete, porque no había nada que ver.
+      // Con cero cadetes no hay selector posible: sigue igual que antes de
+      // que existieran, sin asignar, el comercio lo entrega él mismo.
+      if (cadetes.length > 0) {
+        setAssigning(order);
+        return;
+      }
+      await markAsSent(order, null);
       return;
     }
 
     setActionError(null);
     try {
-      const assignedCadeteId = next === 'OUT_FOR_DELIVERY' ? (cadetes[0]?.user_id ?? null) : undefined;
-      await updateOrderStatus(order.id, next, { assignedCadeteId });
+      await updateOrderStatus(order.id, next);
       await load();
     } catch (err) {
-      // El trigger de la base rechaza transiciones inválidas — si llega acá es
-      // porque dos personas tocaron el mismo pedido a la vez, o un bug.
       setActionError((err as Error).message);
     }
   }
@@ -163,13 +190,7 @@ export function Orders() {
     if (!assigning) return;
     const order = assigning;
     setAssigning(null);
-    setActionError(null);
-    try {
-      await updateOrderStatus(order.id, 'OUT_FOR_DELIVERY', { assignedCadeteId: cadeteId });
-      await load();
-    } catch (err) {
-      setActionError((err as Error).message);
-    }
+    await markAsSent(order, cadeteId);
   }
 
   /**

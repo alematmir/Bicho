@@ -3,7 +3,7 @@ import type { OrderRow } from '../../lib/orders';
 import type { StaffMember } from '../../lib/staff';
 import { useWaiting } from '../../state/waiting';
 import {
-  customerLabel, itemsSummary, minutesWaiting, PAYMENT_LABEL, placedAtLabel,
+  actionLabel, customerLabel, itemsSummary, minutesWaiting, PAYMENT_LABEL, placedAtLabel,
   STALE_MINUTES, STATUS_LABEL,
 } from './orderPresentation';
 
@@ -207,7 +207,7 @@ export function OrderCard({
             onClick={() => onAdvance(order, next)}
             className="rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-white hover:bg-brand-700"
           >
-            {STATUS_LABEL[next]}
+            {actionLabel(next)}
           </button>
         ))}
 

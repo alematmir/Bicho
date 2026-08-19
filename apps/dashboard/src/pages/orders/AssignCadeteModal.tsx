@@ -26,7 +26,7 @@ export function AssignCadeteModal({
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
           <Button variant="primary" onClick={() => onConfirm(selected)}>
-            {selected ? 'Asignar y marcar en camino' : 'Marcar en camino sin asignar'}
+            {selected ? 'Asignar y marcar enviado' : 'Marcar enviado sin asignar'}
           </Button>
         </>
       }
