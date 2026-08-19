@@ -9,6 +9,22 @@ export class StoreNotFoundError extends Error {
   }
 }
 
+/**
+ * El teléfono de WhatsApp del comercio, o null si no tiene uno conectado.
+ * Sirve para el botón "Abrir WhatsApp" después de elegir transferencia — sin
+ * esto, el cliente confirma el pedido y no le queda ningún camino de vuelta
+ * al chat donde el bot le mandó el alias/CBU.
+ *
+ * Va por una función angosta (business_whatsapp_number) y no por un select
+ * directo a whatsapp_accounts: esa tabla no tiene policy de anon a propósito
+ * (tiene token_ref y otros datos de conexión que no son del cliente).
+ */
+export async function fetchBusinessWhatsAppNumber(slug: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('business_whatsapp_number', { p_slug: slug });
+  if (error) throw error;
+  return data ?? null;
+}
+
 /** Paso 1: resolver el comercio por slug, y sus sucursales activas. */
 export async function fetchStorefront(
   slug: string,

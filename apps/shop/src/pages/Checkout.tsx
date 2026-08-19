@@ -126,7 +126,7 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
 
       clear();
       navigate(`/${business.slug}/order/${order.number}`, {
-        state: { orderId: order.id, totalCents: order.total_cents },
+        state: { orderId: order.id, totalCents: order.total_cents, paymentMethod },
       });
     } catch (err) {
       setFormError(
