@@ -29,6 +29,25 @@ export async function fetchStaff(businessId: string): Promise<StaffMember[]> {
 }
 
 /**
+ * Los cadetes que hoy pueden recibir un pedido — para el selector que se
+ * abre al marcar "En camino" (ver Orders.tsx / AssignCadeteModal.tsx). Solo
+ * activos: uno dado de baja no tiene que aparecer como opción aunque su fila
+ * de business_users siga existiendo.
+ */
+export async function fetchActiveCadetes(businessId: string): Promise<StaffMember[]> {
+  const { data, error } = await supabase
+    .from('business_users')
+    .select('user_id, role, username, display_name, is_active, created_at')
+    .eq('business_id', businessId)
+    .eq('role', 'cadete')
+    .eq('is_active', true)
+    .order('display_name');
+
+  if (error) throw new StaffError(error.message);
+  return (data ?? []) as StaffMember[];
+}
+
+/**
  * Todo lo que crea o toca usuarios de auth pasa por la Edge Function: hace
  * falta service_role, que nunca puede estar en el navegador.
  */

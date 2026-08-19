@@ -6,6 +6,7 @@ import {
   cancelOrder, fetchOrders, fetchTransferEvidenceUrl, rejectTransferPayment,
   updateOrderStatus, verifyTransferPayment, type OrderRow,
 } from '../lib/orders';
+import { fetchActiveCadetes, type StaffMember } from '../lib/staff';
 import {
   Button, ConfirmDialog, EmptyState, ErrorState, LoadingState, Modal, PageHeader, SegmentedControl,
 } from '../components/ui';
@@ -14,6 +15,7 @@ import { List } from './orders/List';
 import { Grid } from './orders/Grid';
 import { History } from './orders/History';
 import { OrderTimeline } from './orders/OrderTimeline';
+import { AssignCadeteModal } from './orders/AssignCadeteModal';
 import type { TransferAction } from './orders/OrderCard';
 import {
   customerLabel, isFromToday, itemsSummary, SAME_DAY_TERMINAL_STATUSES,
@@ -44,6 +46,9 @@ export function Orders() {
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [timelineOf, setTimelineOf] = useState<OrderRow | null>(null);
+  const [cadetes, setCadetes] = useState<StaffMember[]>([]);
+  /** Pedido esperando que se elija cadete — solo cuando hay más de uno activo. */
+  const [assigning, setAssigning] = useState<OrderRow | null>(null);
 
   const [view, setView] = useState<View>(
     () => (localStorage.getItem(VIEW_STORAGE_KEY) as View) || 'tablero',
@@ -70,6 +75,14 @@ export function Orders() {
     setLoading(true);
     load();
   }, [load]);
+
+  // Quiénes pueden recibir un pedido asignado — para el selector que se abre
+  // al marcar "En camino" (ver handleAdvance). No hace falta Realtime acá:
+  // cambia solo desde Configuración → Usuarios, muy de vez en cuando.
+  useEffect(() => {
+    if (!businessId) { setCadetes([]); return; }
+    fetchActiveCadetes(businessId).then(setCadetes).catch(() => setCadetes([]));
+  }, [businessId]);
 
   /**
    * El tablero se actualiza solo.
@@ -117,14 +130,44 @@ export function Orders() {
     };
   }, [load]);
 
+  /**
+   * READY → OUT_FOR_DELIVERY ("En camino") es el único momento en que se
+   * elige quién se lo lleva — ver 20260819000800_assign_cadete.sql. Pickup no
+   * pasa por acá nunca: READY → DELIVERED es directo y boardActions() ya
+   * filtra OUT_FOR_DELIVERY a `fulfillment_type === 'delivery'`.
+   *
+   * Con un solo cadete activo se asigna solo, sin preguntar — no hay nada que
+   * elegir. Con más de uno, se abre el selector y esta función queda a medio
+   * camino hasta que AssignCadeteModal decida. Con cero, sigue como antes de
+   * que existieran los cadetes: sin asignar, el comercio lo entrega él mismo.
+   */
   async function handleAdvance(order: OrderRow, next: OrderStatus) {
+    if (next === 'OUT_FOR_DELIVERY' && cadetes.length > 1) {
+      setAssigning(order);
+      return;
+    }
+
     setActionError(null);
     try {
-      await updateOrderStatus(order.id, next);
+      const assignedCadeteId = next === 'OUT_FOR_DELIVERY' ? (cadetes[0]?.user_id ?? null) : undefined;
+      await updateOrderStatus(order.id, next, { assignedCadeteId });
       await load();
     } catch (err) {
       // El trigger de la base rechaza transiciones inválidas — si llega acá es
       // porque dos personas tocaron el mismo pedido a la vez, o un bug.
+      setActionError((err as Error).message);
+    }
+  }
+
+  async function handleAssignAndAdvance(cadeteId: string | null) {
+    if (!assigning) return;
+    const order = assigning;
+    setAssigning(null);
+    setActionError(null);
+    try {
+      await updateOrderStatus(order.id, 'OUT_FOR_DELIVERY', { assignedCadeteId: cadeteId });
+      await load();
+    } catch (err) {
       setActionError((err as Error).message);
     }
   }
@@ -256,7 +299,7 @@ export function Orders() {
         ) : view === 'tablero' ? (
           <Board
             orders={boardOrders} onAdvance={handleAdvance} onCancel={setCancelling}
-            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction} cadetes={cadetes}
           />
         ) : view === 'lista' ? (
           <List
@@ -266,7 +309,7 @@ export function Orders() {
         ) : (
           <Grid
             orders={operational} onAdvance={handleAdvance} onCancel={setCancelling}
-            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction} cadetes={cadetes}
           />
         )}
       </div>
@@ -276,6 +319,14 @@ export function Orders() {
           orderId={timelineOf.id}
           orderNumber={timelineOf.number}
           onClose={() => setTimelineOf(null)}
+        />
+      )}
+
+      {assigning && (
+        <AssignCadeteModal
+          cadetes={cadetes}
+          onConfirm={handleAssignAndAdvance}
+          onClose={() => setAssigning(null)}
         />
       )}
 

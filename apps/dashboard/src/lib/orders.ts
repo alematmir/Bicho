@@ -21,6 +21,14 @@ export type OrderRow = {
   customer_notes: string | null;
   /** Qué pidió, para no tener que abrir el pedido para saberlo. */
   items: OrderItem[];
+  /**
+   * Quién se lo lleva. Solo tiene sentido para delivery — ver
+   * 20260819000800_assign_cadete.sql. No viene por embed (orders no tiene FK
+   * a business_users, que tiene clave compuesta): el nombre se resuelve en
+   * el front cruzando con la lista de cadetes ya cargada, en vez de pedirle
+   * a Postgres un join que no puede inferir solo.
+   */
+  assigned_cadete_id: string | null;
 };
 
 export async function fetchOrders(businessId: string): Promise<OrderRow[]> {
@@ -29,7 +37,7 @@ export async function fetchOrders(businessId: string): Promise<OrderRow[]> {
     // En una sola cadena literal a propósito: el SDK infiere el tipo de la
     // respuesta leyendo este string, y partirlo con `+` lo deja en `string`
     // genérico y tira abajo todo el tipado de la consulta.
-    .select('id, number, status, fulfillment_type, payment_method, total_cents, refund_status, placed_at, customer_id, customer_notes, customers(name, phone_e164), order_items(name_snapshot, qty)')
+    .select('id, number, status, fulfillment_type, payment_method, total_cents, refund_status, placed_at, customer_id, customer_notes, assigned_cadete_id, customers(name, phone_e164), order_items(name_snapshot, qty)')
     .eq('business_id', businessId)
     .order('placed_at', { ascending: false })
     .limit(100);
@@ -53,6 +61,7 @@ export async function fetchOrders(businessId: string): Promise<OrderRow[]> {
       customer_phone: customer?.phone_e164 ?? '',
       customer_notes: o.customer_notes,
       items: items.map((i) => ({ name: i.name_snapshot, qty: i.qty })),
+      assigned_cadete_id: o.assigned_cadete_id,
     };
   });
 }
@@ -85,9 +94,24 @@ async function notifyBestEffort(orderId: string, templateKey?: string): Promise<
  * supabase/migrations/20260816001000_order_status_guard.sql. Acá no hace
  * falta duplicar esa lógica, solo dejar que el error del trigger suba tal cual
  * si alguien intenta algo inválido.
+ *
+ * `assignedCadeteId` viaja en el mismo UPDATE que el status cuando la
+ * transición es READY → OUT_FOR_DELIVERY (Orders.tsx decide cuándo): un solo
+ * viaje a la base en vez de dos, y el trigger de integridad
+ * (orders_validate_assigned_cadete, 20260819000800_assign_cadete.sql) valida
+ * el cadete en la misma sentencia. `undefined` deja la columna como está;
+ * `null` explícito la limpia (el pedido queda sin nadie hasta que alguien lo
+ * tome).
  */
-export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
-  const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  opts: { assignedCadeteId?: string | null } = {},
+): Promise<void> {
+  const patch: { status: OrderStatus; assigned_cadete_id?: string | null } = { status };
+  if (opts.assignedCadeteId !== undefined) patch.assigned_cadete_id = opts.assignedCadeteId;
+
+  const { error } = await supabase.from('orders').update(patch).eq('id', orderId);
   if (error) throw error;
   await notifyBestEffort(orderId);
 }

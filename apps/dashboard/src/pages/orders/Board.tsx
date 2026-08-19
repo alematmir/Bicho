@@ -5,6 +5,7 @@ import {
 } from '@dnd-kit/core';
 import { boardActions, formatArs, type OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
+import type { StaffMember } from '../../lib/staff';
 import { OrderCard, type TransferAction } from './OrderCard';
 import {
   ALWAYS_VISIBLE_COLUMN_KEYS, BOARD_COLUMNS, STATUS_TONE, type BoardColumn,
@@ -16,9 +17,13 @@ type Props = {
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
   onTransferAction: (order: OrderRow, action: TransferAction) => void;
+  /** Para el chip "🛵 <nombre>" de OrderCard — ver su comentario. */
+  cadetes?: StaffMember[];
 };
 
-export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferAction }: Props) {
+export function Board({
+  orders, onAdvance, onCancel, onShowTimeline, onTransferAction, cadetes = [],
+}: Props) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   // Un umbral de 6px antes de considerar que se está arrastrando: sin esto,
@@ -91,6 +96,7 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
             onCancel={onCancel}
             onShowTimeline={onShowTimeline}
             onTransferAction={onTransferAction}
+            cadetes={cadetes}
             draggingId={draggingId}
             // Mientras no se arrastra nada, ninguna columna está apagada.
             dimmed={
@@ -119,7 +125,8 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
 }
 
 function Column({
-  column, orders, onAdvance, onCancel, onShowTimeline, onTransferAction, draggingId, dimmed, highlighted,
+  column, orders, onAdvance, onCancel, onShowTimeline, onTransferAction, cadetes, draggingId,
+  dimmed, highlighted,
 }: {
   column: BoardColumn;
   orders: OrderRow[];
@@ -127,6 +134,7 @@ function Column({
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
   onTransferAction: (order: OrderRow, action: TransferAction) => void;
+  cadetes: StaffMember[];
   draggingId: string | null;
   dimmed: boolean;
   highlighted: boolean;
@@ -177,6 +185,7 @@ function Column({
               onCancel={onCancel}
               onShowTimeline={onShowTimeline}
               onTransferAction={onTransferAction}
+              cadetes={cadetes}
               hidden={draggingId === order.id}
             />
           ))
@@ -187,13 +196,14 @@ function Column({
 }
 
 function DraggableCard({
-  order, onAdvance, onCancel, onShowTimeline, onTransferAction, hidden,
+  order, onAdvance, onCancel, onShowTimeline, onTransferAction, cadetes, hidden,
 }: {
   order: OrderRow;
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
   onTransferAction: (order: OrderRow, action: TransferAction) => void;
+  cadetes: StaffMember[];
   hidden: boolean;
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({ id: order.id });
@@ -213,6 +223,7 @@ function DraggableCard({
           onCancel={onCancel}
           onShowTimeline={onShowTimeline}
           onTransferAction={onTransferAction}
+          cadetes={cadetes}
         />
       </div>
     </div>

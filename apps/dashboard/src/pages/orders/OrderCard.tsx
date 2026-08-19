@@ -1,5 +1,6 @@
 import { formatArs, formatForDisplay, boardActions, type OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
+import type { StaffMember } from '../../lib/staff';
 import { useWaiting } from '../../state/waiting';
 import {
   customerLabel, itemsSummary, minutesWaiting, PAYMENT_LABEL, placedAtLabel,
@@ -25,6 +26,14 @@ export type OrderCardProps = {
   showStatus?: boolean;
   /** La tarjeta la está arrastrando el usuario. */
   dragging?: boolean;
+  /**
+   * Para resolver el nombre de order.assigned_cadete_id — orders no tiene un
+   * embed directo (ver OrderRow.assigned_cadete_id), así que la tarjeta cruza
+   * acá con la lista que ya cargó Orders.tsx. Opcional: sin ella, el chip de
+   * cadete simplemente no aparece (así DragOverlay en Board.tsx, que arma un
+   * OrderCard de mentira, no necesita pasarla).
+   */
+  cadetes?: StaffMember[];
 };
 
 /**
@@ -37,7 +46,7 @@ export type OrderCardProps = {
  */
 export function OrderCard({
   order, onAdvance, onCancel, onShowTimeline, onTransferAction,
-  showStatus = false, dragging = false,
+  showStatus = false, dragging = false, cadetes = [],
 }: OrderCardProps) {
   // PENDING_TRANSFER_VERIFICATION tiene sus propios botones (abajo): los
   // genéricos de boardActions acá ofrecerían "Pagado" a ciegas, sin haber
@@ -55,6 +64,8 @@ export function OrderCard({
   const summary = itemsSummary(order);
   const waitingMin = minutesWaiting(order.placed_at);
   const stale = waitingMin >= STALE_MINUTES;
+  const assignedCadete = cadetes.find((c) => c.user_id === order.assigned_cadete_id);
+  const assignedCadeteName = assignedCadete?.display_name || assignedCadete?.username;
 
   return (
     <div
@@ -93,6 +104,13 @@ export function OrderCard({
         <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-neutral-600 sm:px-2">
           {order.fulfillment_type === 'delivery' ? 'Envío' : 'Retiro'}
         </span>
+        {/* A quién se le asignó — sky, mismo tono que "Enviado"/"En camino"
+            en STATUS_TONE: es la misma idea de "está en curso de reparto". */}
+        {order.assigned_cadete_id && (
+          <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-sky-800 sm:px-2">
+            🛵 {assignedCadeteName ?? 'Cadete'}
+          </span>
+        )}
         {/* El medio de pago es el chip menos urgente de leer: el primero que
             se saca de encima cuando la columna está apretada. */}
         {order.payment_method && (

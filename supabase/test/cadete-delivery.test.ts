@@ -1,6 +1,7 @@
 // Qué puede ver y tocar un cadete (rol business_users.role = 'cadete') —
-// políticas orders_cadete_select / orders_cadete_confirm / customers_cadete_read
-// / order_items_cadete_read, ver 20260819000700_delivery_confirmation.sql.
+// políticas orders_cadete_select / customers_cadete_read /
+// order_items_cadete_read, ver 20260819000700_delivery_confirmation.sql y
+// 20260819000800_assign_cadete.sql (asignación por pedido).
 //
 // El molde de is_member() (owner/staff) NO aplica a cadetes a propósito: son
 // políticas nuevas y acotadas, no una ampliación de is_member(). Estos tests
@@ -13,16 +14,26 @@ let db: Db;
 
 async function newOrder(
   status: string,
-  opts: { fulfillment?: 'pickup' | 'delivery'; business?: string; customer?: string } = {},
+  opts: {
+    fulfillment?: 'pickup' | 'delivery';
+    business?: string;
+    customer?: string;
+    /** `undefined` = sin asignar. Mismo default que un pedido recién creado. */
+    assignedCadete?: string;
+  } = {},
 ) {
-  const { fulfillment = 'delivery', business = ID.businessA, customer = ID.customerA } = opts;
+  const {
+    fulfillment = 'delivery', business = ID.businessA, customer = ID.customerA, assignedCadete,
+  } = opts;
   const id = crypto.randomUUID();
   const branch = business === ID.businessA ? ID.branchA : ID.branchB;
   const address = fulfillment === 'delivery' ? `'{"street":"Test 123"}'::jsonb` : 'null';
+  const cadeteValue = assignedCadete ? `'${assignedCadete}'` : 'null';
   await db.exec(`insert into public.orders (id, business_id, branch_id, customer_id,
-                                            status, fulfillment_type, delivery_address, total_cents)
+                                            status, fulfillment_type, delivery_address, total_cents,
+                                            assigned_cadete_id)
                  values ('${id}','${business}','${branch}','${customer}',
-                         '${status}','${fulfillment}', ${address}, 1000)`);
+                         '${status}','${fulfillment}', ${address}, 1000, ${cadeteValue})`);
   return id;
 }
 
@@ -31,24 +42,36 @@ beforeEach(async () => {
 });
 
 describe('lectura del cadete', () => {
-  it('ve un pedido de delivery en camino', async () => {
-    const id = await newOrder('OUT_FOR_DELIVERY');
+  it('ve un pedido de delivery en camino QUE LE ASIGNARON', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY', { assignedCadete: ID.cadeteA });
     const r = await asUser<{ id: string }>(db, ID.cadeteA,
       `select id from public.orders where id='${id}'`);
     expect(r.rows).toHaveLength(1);
   });
 
-  it('ve un pedido ya enviado, y uno ya confirmado (para ver "lo que entregó hoy")', async () => {
-    const dispatched = await newOrder('DISPATCHED');
-    const confirmed = await newOrder('DELIVERY_CONFIRMED');
+  it('ve uno ya enviado y uno ya confirmado, de los suyos (para ver "lo que entregó hoy")', async () => {
+    const dispatched = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA });
+    const confirmed = await newOrder('DELIVERY_CONFIRMED', { assignedCadete: ID.cadeteA });
     const r = await asUser<{ id: string }>(db, ID.cadeteA,
       `select id from public.orders where id in ('${dispatched}','${confirmed}') order by id`);
     expect(r.rows).toHaveLength(2);
   });
 
+  it('NO ve un pedido en camino que todavía no le asignaron a nadie', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY');
+    const r = await asUser<{ id: string }>(db, ID.cadeteA, `select id from public.orders where id='${id}'`);
+    expect(r.rows).toHaveLength(0);
+  });
+
+  it('NO ve un pedido asignado a OTRO cadete del mismo comercio', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY', { assignedCadete: ID.cadeteA2 });
+    const r = await asUser<{ id: string }>(db, ID.cadeteA, `select id from public.orders where id='${id}'`);
+    expect(r.rows).toHaveLength(0);
+  });
+
   it('NO ve pedidos que todavía no salieron del local (PAID, PREPARING, READY)', async () => {
     for (const status of ['PAID', 'PREPARING', 'READY']) {
-      const id = await newOrder(status);
+      const id = await newOrder(status, { assignedCadete: ID.cadeteA });
       const r = await asUser<{ id: string }>(db, ID.cadeteA, `select id from public.orders where id='${id}'`);
       expect(r.rows).toHaveLength(0);
     }
@@ -61,22 +84,26 @@ describe('lectura del cadete', () => {
   });
 
   it('NO ve pedidos de otro comercio', async () => {
+    // Ni haría falta probar "asignado a mí pero de otro comercio": el
+    // trigger de integridad (orders_validate_assigned_cadete) ya impide que
+    // esa fila exista — ver "a quién se le puede asignar un pedido" abajo.
     const id = await newOrder('OUT_FOR_DELIVERY', { business: ID.businessB, customer: ID.customerB });
     const r = await asUser<{ id: string }>(db, ID.cadeteA, `select id from public.orders where id='${id}'`);
     expect(r.rows).toHaveLength(0);
   });
 
-  it('puede leer el nombre y teléfono del cliente de un pedido que ya ve', async () => {
-    await newOrder('OUT_FOR_DELIVERY');
+  it('puede leer el nombre y teléfono del cliente de un pedido que le asignaron', async () => {
+    await newOrder('OUT_FOR_DELIVERY', { assignedCadete: ID.cadeteA });
     const r = await asUser<{ name: string | null }>(db, ID.cadeteA,
       `select name from public.customers where id='${ID.customerA}'`);
     expect(r.rows).toHaveLength(1);
   });
 
-  it('NO puede leer clientes sin un pedido de por medio', async () => {
-    // customerB no tiene ningún pedido de delivery en camino para el cadete A.
+  it('NO puede leer clientes sin un pedido suyo de por medio', async () => {
+    // El único pedido de customerA está OUT_FOR_DELIVERY pero sin asignar.
+    await newOrder('OUT_FOR_DELIVERY');
     const r = await asUser<{ name: string | null }>(db, ID.cadeteA,
-      `select name from public.customers where id='${ID.customerB}'`);
+      `select name from public.customers where id='${ID.customerA}'`);
     expect(r.rows).toHaveLength(0);
   });
 });
@@ -106,6 +133,31 @@ describe('el cadete puede leer su propia membresía', () => {
   });
 });
 
+describe('a quién se le puede asignar un pedido', () => {
+  it('el dueño puede asignarle un pedido a un cadete activo de su comercio', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY');
+    await asUser(db, ID.userA,
+      `update public.orders set assigned_cadete_id='${ID.cadeteA}' where id='${id}'`);
+    const r = await db.query<{ assigned_cadete_id: string }>(
+      `select assigned_cadete_id from public.orders where id='${id}'`);
+    expect(r.rows[0].assigned_cadete_id).toBe(ID.cadeteA);
+  });
+
+  it('NO se puede asignar a alguien que no es cadete de ese comercio (ej. un empleado)', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY');
+    await expect(
+      asUser(db, ID.userA, `update public.orders set assigned_cadete_id='${ID.staffA}' where id='${id}'`),
+    ).rejects.toThrow(/tiene que ser un cadete activo/);
+  });
+
+  it('NO se puede asignar a un cadete de OTRO comercio', async () => {
+    const id = await newOrder('OUT_FOR_DELIVERY', { business: ID.businessB, customer: ID.customerB });
+    await expect(
+      asUser(db, ID.userB, `update public.orders set assigned_cadete_id='${ID.cadeteA}' where id='${id}'`),
+    ).rejects.toThrow(/tiene que ser un cadete activo/);
+  });
+});
+
 describe('confirmar entrega — vía confirm_delivery(), no UPDATE directo', () => {
   // No hay policy de UPDATE para cadetes sobre `orders` a propósito: RLS
   // filtra FILAS, no columnas, así que using(status='DISPATCHED') + with
@@ -114,23 +166,39 @@ describe('confirmar entrega — vía confirm_delivery(), no UPDATE directo', () 
   // es SECURITY DEFINER y hace ella misma el único UPDATE permitido — mismo
   // molde que verify_transfer_payment.
 
-  it('puede pasar un pedido enviado a entregado', async () => {
-    const id = await newOrder('DISPATCHED');
+  it('puede pasar un pedido SUYO de enviado a entregado', async () => {
+    const id = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA });
     await asUser(db, ID.cadeteA, `select public.confirm_delivery('${id}')`);
     const r = await db.query<{ status: string }>(`select status from public.orders where id='${id}'`);
     expect(r.rows[0].status).toBe('DELIVERY_CONFIRMED');
   });
 
   it('el timeline queda firmado con el cadete', async () => {
-    const id = await newOrder('DISPATCHED');
+    const id = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA });
     await asUser(db, ID.cadeteA, `select public.confirm_delivery('${id}')`);
     const events = await db.query<{ actor: string }>(
       `select actor from public.order_events where order_id='${id}'`);
     expect(events.rows).toEqual([{ actor: `user:${ID.cadeteA}` }]);
   });
 
+  it('NO puede confirmar un pedido asignado a OTRO cadete', async () => {
+    const id = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA2 });
+    await expect(
+      asUser(db, ID.cadeteA, `select public.confirm_delivery('${id}')`),
+    ).rejects.toThrow(/asignado a otro cadete/);
+    const r = await db.query<{ status: string }>(`select status from public.orders where id='${id}'`);
+    expect(r.rows[0].status).toBe('DISPATCHED');
+  });
+
+  it('NO puede confirmar un pedido sin asignar, aunque sepa el id', async () => {
+    const id = await newOrder('DISPATCHED');
+    await expect(
+      asUser(db, ID.cadeteA, `select public.confirm_delivery('${id}')`),
+    ).rejects.toThrow(/asignado a otro cadete/);
+  });
+
   it('NO puede saltear "enviado" y confirmar directo desde "en camino"', async () => {
-    const id = await newOrder('OUT_FOR_DELIVERY');
+    const id = await newOrder('OUT_FOR_DELIVERY', { assignedCadete: ID.cadeteA });
     await expect(
       asUser(db, ID.cadeteA, `select public.confirm_delivery('${id}')`),
     ).rejects.toThrow(/Transición de pedido inválida/);
@@ -148,14 +216,14 @@ describe('confirmar entrega — vía confirm_delivery(), no UPDATE directo', () 
   });
 
   it('un empleado (staff) NO puede usar confirm_delivery — no es cadete', async () => {
-    const id = await newOrder('DISPATCHED');
+    const id = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA });
     await expect(
       asUser(db, ID.staffA, `select public.confirm_delivery('${id}')`),
     ).rejects.toThrow(/solo para cadetes/);
   });
 
   it('un UPDATE directo del cadete no mueve nada: no hay policy de escritura para ese rol', async () => {
-    const id = await newOrder('DISPATCHED');
+    const id = await newOrder('DISPATCHED', { assignedCadete: ID.cadeteA });
     await asUser(db, ID.cadeteA, `update public.orders set status='DELIVERY_CONFIRMED' where id='${id}'`);
     const r = await db.query<{ status: string }>(`select status from public.orders where id='${id}'`);
     expect(r.rows[0].status).toBe('DISPATCHED');
