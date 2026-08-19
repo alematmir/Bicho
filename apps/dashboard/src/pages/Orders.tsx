@@ -44,6 +44,7 @@ export function Orders() {
   const [evidenceOf, setEvidenceOf] = useState<OrderRow | null>(null);
   const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [verifyingEvidence, setVerifyingEvidence] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [timelineOf, setTimelineOf] = useState<OrderRow | null>(null);
   const [cadetes, setCadetes] = useState<StaffMember[]>([]);
@@ -228,6 +229,40 @@ export function Orders() {
 
     // 'reject' abre el diálogo con motivo — lo resuelve el ConfirmDialog de abajo.
     setRejecting(order);
+  }
+
+  /**
+   * "Verifiqué" desde ADENTRO del modal del comprobante — no hacía falta
+   * cerrarlo para tocar el botón de la tarjeta y volver a abrir. La imagen
+   * queda a la vista mientras se decide, que es justo cuando más hace falta
+   * mirarla.
+   */
+  async function handleVerifyFromEvidence() {
+    if (!evidenceOf) return;
+    const order = evidenceOf;
+    setVerifyingEvidence(true);
+    setEvidenceError(null);
+    try {
+      await verifyTransferPayment(order.id);
+      setEvidenceOf(null);
+      setEvidenceUrl(null);
+      await load();
+    } catch (err) {
+      // Se queda abierto con el error adentro: la imagen sigue a la vista
+      // por si hace falta mirarla de nuevo antes de reintentar.
+      setEvidenceError((err as Error).message);
+    } finally {
+      setVerifyingEvidence(false);
+    }
+  }
+
+  /** "Rechazar" desde el modal del comprobante: cierra este y abre el de motivo. */
+  function handleRejectFromEvidence() {
+    if (!evidenceOf) return;
+    setRejecting(evidenceOf);
+    setEvidenceOf(null);
+    setEvidenceUrl(null);
+    setEvidenceError(null);
   }
 
   /**
@@ -418,6 +453,28 @@ export function Orders() {
         <Modal
           title={`Comprobante · pedido #${evidenceOf.number}`}
           onClose={() => { setEvidenceOf(null); setEvidenceUrl(null); setEvidenceError(null); }}
+          footer={
+            // Con el pedido ya verificado o rechazado (por ejemplo, otra
+            // persona lo tocó mientras esto estaba abierto), estos botones no
+            // tienen nada que hacer — que desaparezcan es la señal.
+            evidenceOf.status === 'PENDING_TRANSFER_VERIFICATION' ? (
+              <>
+                <button
+                  onClick={handleRejectFromEvidence}
+                  className="rounded-full border border-red-200 px-4 py-2 text-sm font-medium text-red-500 hover:bg-red-50"
+                >
+                  ✗ Rechazar
+                </button>
+                <button
+                  onClick={handleVerifyFromEvidence}
+                  disabled={verifyingEvidence || !evidenceUrl}
+                  className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {verifyingEvidence ? 'Verificando...' : '✓ Verifiqué'}
+                </button>
+              </>
+            ) : undefined
+          }
         >
           {evidenceError ? (
             <p className="text-sm text-red-600">{evidenceError}</p>
