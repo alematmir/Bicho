@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
     return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
   }
 
-  const { order_id } = await req.json().catch(() => ({}));
+  const { order_id, template_key } = await req.json().catch(() => ({}));
   if (!order_id) return ok({ ok: false, reason: "falta order_id" });
 
   const { data: order } = await supabaseAdmin
@@ -57,7 +57,14 @@ Deno.serve(async (req) => {
   // PENDING_PAYMENT tampoco. templateKeyFor() es la misma función que usa el
   // tablero del dashboard para saber qué botones ofrecer: una sola fuente de
   // verdad sobre qué transición hace qué.
-  const key = templateKeyFor(order.status);
+  //
+  // template_key es la excepción: para PENDING_PAYMENT, templateKeyFor()
+  // devuelve null a propósito porque ese estado es ambiguo (también es el de
+  // creación y el de reintento tras PAYMENT_FAILED, que no deberían compartir
+  // mensaje). Rechazar una transferencia también termina en PENDING_PAYMENT,
+  // pero con un texto propio — el caller (rejectTransferPayment) lo pisa
+  // explícito en vez de forzarlo en el mapa genérico.
+  const key = template_key ?? templateKeyFor(order.status);
   if (!key) return ok({ ok: true, skipped: true, reason: `${order.status} no notifica` });
 
   const { data: wa } = await supabaseAdmin

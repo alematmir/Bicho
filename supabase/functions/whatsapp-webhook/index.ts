@@ -23,7 +23,9 @@ import {
   type ConversationEnv, type ConversationState, type InboundEvent,
 } from "../../../packages/shared/src/conversation.ts";
 import { templateKeyFor } from "../../../packages/shared/src/orders.ts";
-import { fillTemplate, getTemplate, sendButtons, sendList, sendText } from "../_shared/whatsapp.ts";
+import {
+  downloadMedia, fillTemplate, getTemplate, sendButtons, sendList, sendText,
+} from "../_shared/whatsapp.ts";
 
 const VERIFY_TOKEN = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN") ?? "";
 const SHOP_BASE_URL = Deno.env.get("SHOP_BASE_URL") ?? "";
@@ -115,6 +117,7 @@ type WhatsAppMessage = {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string };
   };
+  image?: { id: string };
 };
 
 function toInboundEvent(msg: WhatsAppMessage): InboundEvent {
@@ -124,6 +127,8 @@ function toInboundEvent(msg: WhatsAppMessage): InboundEvent {
     const id = msg.interactive?.button_reply?.id ?? msg.interactive?.list_reply?.id;
     if (id) return { kind: "button", id };
   }
+
+  if (msg.type === "image" && msg.image?.id) return { kind: "image", mediaId: msg.image.id };
 
   return { kind: "unsupported", messageType: msg.type };
 }
@@ -227,7 +232,77 @@ async function execute(action: Action, ctx: ExecCtx): Promise<void> {
       });
       return;
     }
+
+    case "process_transfer_receipt": {
+      await handleTransferReceipt(action.orderId, action.mediaId, ctx);
+      return;
+    }
   }
+}
+
+// Extensión de nombre de archivo a partir del content-type. Solo importa que
+// quede algo razonable en Storage — el que de verdad decide cómo mostrarlo es
+// el content-type que se guarda al subir.
+const EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp",
+};
+
+/**
+ * Llegó (probablemente) el comprobante de una transferencia. Ver
+ * docs/00-arquitectura.md §7.3: de acá en más el pedido queda esperando que
+ * el comercio lo verifique desde el dashboard, con exactamente la misma
+ * lógica posterior que el webhook de Mercado Pago (verify_transfer_payment).
+ */
+async function handleTransferReceipt(orderId: string, mediaId: string, ctx: ExecCtx): Promise<void> {
+  // Revalida antes de gastar la descarga: si el pedido ya no es elegible (una
+  // segunda foto después de que la primera ya lo movió de estado, o alguien
+  // ya lo canceló), no hay nada que hacer.
+  const { data: order } = await supabaseAdmin
+    .from("orders")
+    .select("status, payment_method, total_cents")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (!order || order.payment_method !== "transfer" || order.status !== "PENDING_PAYMENT") {
+    return;
+  }
+
+  const media = await downloadMedia(mediaId);
+  if (!media) return; // downloadMedia ya logueó el motivo
+
+  const ext = EXT_BY_MIME[media.contentType] ?? "bin";
+  const path = `${ctx.businessId}/${orderId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from("payment-evidence")
+    .upload(path, media.bytes, { contentType: media.contentType });
+  if (uploadError) {
+    console.error("no se pudo subir el comprobante:", uploadError);
+    return;
+  }
+
+  // Dispara orders_guard_and_log_status (valida la transición y firma
+  // actor='system': esto lo mueve el bot, no una persona logueada).
+  const { error: statusError } = await supabaseAdmin
+    .from("orders")
+    .update({ status: "PENDING_TRANSFER_VERIFICATION" })
+    .eq("id", orderId);
+  if (statusError) {
+    console.error("no se pudo pasar el pedido a verificación:", statusError);
+    return;
+  }
+
+  await supabaseAdmin.from("payments").insert({
+    business_id: ctx.businessId,
+    order_id: orderId,
+    method: "transfer",
+    amount_cents: order.total_cents,
+    evidence_url: path,
+  });
+
+  const to = toWhatsAppSendFormat(ctx.to);
+  const body = fillTemplate(await getTemplate(ctx.businessId, "transfer_receipt_received"), {});
+  if (body) await sendText(ctx.phoneNumberId, to, body);
 }
 
 // Respaldo para los estados que no tienen plantilla editable, porque nunca se
@@ -390,7 +465,7 @@ async function handleIncoming(req: Request): Promise<Response> {
       // consultar para volver a cero.
       const resetToIdle = () => {
         const reset = decide(state, context, { kind: "timeout" }, {
-          branchCount: 0, allowsInquiry: false, sessionValid: false,
+          branchCount: 0, allowsInquiry: false, sessionValid: false, awaitingTransferReceipt: false,
         });
         state = reset.nextState;
         context = reset.nextContext;
@@ -403,12 +478,20 @@ async function handleIncoming(req: Request): Promise<Response> {
       // como si nada hubiera pasado, en vez de recibir un saludo de cero. La
       // máquina en sí (decide()) no consulta la base — este chequeo vive acá,
       // del lado de quien sí puede.
+      //
+      // La misma consulta resuelve si hay que esperar un comprobante: un
+      // pedido por transferencia que todavía no tiene foto es, ni más ni
+      // menos, uno en PENDING_PAYMENT — ver ConversationEnv.awaitingTransferReceipt.
+      let awaitingTransferReceipt = false;
       if (context.activeOrderId) {
         const { data: activeOrder } = await supabaseAdmin
-          .from("orders").select("status").eq("id", context.activeOrderId).maybeSingle();
+          .from("orders").select("status, payment_method").eq("id", context.activeOrderId).maybeSingle();
         if (!activeOrder || activeOrder.status === "DELIVERED" || activeOrder.status === "CANCELLED") {
           resetToIdle();
           diag.push({ step: "pedido cerrado → reset", state });
+        } else {
+          awaitingTransferReceipt =
+            activeOrder.payment_method === "transfer" && activeOrder.status === "PENDING_PAYMENT";
         }
       }
 
@@ -431,6 +514,7 @@ async function handleIncoming(req: Request): Promise<Response> {
         branchCount: await countActiveBranches(business.businessId),
         allowsInquiry: true, // sin setting propio todavía; ver docs/TODO.md
         sessionValid: await isSessionValid(context.sessionId),
+        awaitingTransferReceipt,
       };
       diag.push({ step: "env", env });
 

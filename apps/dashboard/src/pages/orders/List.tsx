@@ -1,5 +1,6 @@
 import { boardActions, formatArs, formatForDisplay, type OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
+import type { TransferAction } from './OrderCard';
 import {
   customerLabel, itemsSummary, PAYMENT_LABEL, placedAtLabel, STATUS_LABEL, STATUS_TONE,
 } from './orderPresentation';
@@ -9,6 +10,7 @@ type Props = {
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
+  onTransferAction: (order: OrderRow, action: TransferAction) => void;
 };
 
 /**
@@ -17,7 +19,7 @@ type Props = {
  * A diferencia del tablero, acá SÍ entran los pedidos terminados y cancelados:
  * el caso de uso es "el cliente dice que pidió el martes y no le llegó".
  */
-export function List({ orders, onAdvance, onCancel, onShowTimeline }: Props) {
+export function List({ orders, onAdvance, onCancel, onShowTimeline, onTransferAction }: Props) {
   return (
     <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white">
       <table className="w-full min-w-[52rem] text-sm">
@@ -34,8 +36,12 @@ export function List({ orders, onAdvance, onCancel, onShowTimeline }: Props) {
         </thead>
         <tbody className="divide-y divide-neutral-50">
           {orders.map((order) => {
-            const actions = boardActions(order.status, order.fulfillment_type)
-              .filter((s) => s !== 'CANCELLED');
+            // Mismo criterio que OrderCard: PENDING_TRANSFER_VERIFICATION
+            // tiene sus propios botones, no los genéricos de boardActions.
+            const awaitingTransfer = order.status === 'PENDING_TRANSFER_VERIFICATION';
+            const actions = awaitingTransfer
+              ? []
+              : boardActions(order.status, order.fulfillment_type).filter((s) => s !== 'CANCELLED');
             const canCancel = boardActions(order.status, order.fulfillment_type)
               .includes('CANCELLED');
 
@@ -89,6 +95,28 @@ export function List({ orders, onAdvance, onCancel, onShowTimeline }: Props) {
                     >
                       Historial
                     </button>
+                    {awaitingTransfer && (
+                      <>
+                        <button
+                          onClick={() => onTransferAction(order, 'view_evidence')}
+                          className="whitespace-nowrap rounded-full border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+                        >
+                          Ver comprobante 🖼
+                        </button>
+                        <button
+                          onClick={() => onTransferAction(order, 'verify')}
+                          className="whitespace-nowrap rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+                        >
+                          ✓ Verifiqué
+                        </button>
+                        <button
+                          onClick={() => onTransferAction(order, 'reject')}
+                          className="whitespace-nowrap rounded-full border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+                        >
+                          ✗ Rechazar
+                        </button>
+                      </>
+                    )}
                     {actions.map((next) => (
                       <button
                         key={next}

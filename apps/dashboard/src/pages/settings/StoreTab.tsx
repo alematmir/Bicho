@@ -13,12 +13,40 @@ export function StoreTab() {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // El alias/CBU no viaja en Membership (igual que los colores de marca, ver
+  // BrandTab): esta pantalla se los trae aparte.
+  const [transferAlias, setTransferAlias] = useState('');
+  const [transferCbu, setTransferCbu] = useState('');
+  const [transferLoading, setTransferLoading] = useState(true);
+  const [transferSaving, setTransferSaving] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [transferSaved, setTransferSaved] = useState(false);
+
   useEffect(() => {
     if (!current) return;
     setName(current.name);
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.business_id, current?.name]);
+
+  useEffect(() => {
+    if (!current) return;
+    setTransferLoading(true);
+    supabase
+      .from('businesses')
+      .select('transfer_alias, transfer_cbu')
+      .eq('id', current.business_id)
+      .single()
+      .then(({ data, error }) => {
+        if (error) setTransferError(error.message);
+        else {
+          setTransferAlias(data.transfer_alias ?? '');
+          setTransferCbu(data.transfer_cbu ?? '');
+        }
+        setTransferLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.business_id]);
 
   const isOwner = current?.role === 'owner';
 
@@ -38,6 +66,24 @@ export function StoreTab() {
       await refetch();
     }
     setSaving(false);
+  }
+
+  async function handleSaveTransfer() {
+    if (!current) return;
+    setTransferSaving(true);
+    setTransferError(null);
+    setTransferSaved(false);
+    const { error } = await supabase
+      .from('businesses')
+      .update({
+        transfer_alias: transferAlias.trim() || null,
+        transfer_cbu: transferCbu.trim() || null,
+      })
+      .eq('id', current.business_id);
+
+    if (error) setTransferError(error.message);
+    else setTransferSaved(true);
+    setTransferSaving(false);
   }
 
   if (!current) return null;
@@ -71,6 +117,53 @@ export function StoreTab() {
               Guardar
             </Button>
             {saved && <span className="text-sm text-emerald-600">Guardado ✓</span>}
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <p className="text-sm font-medium text-neutral-800">Transferencia bancaria</p>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          Si cargás alguno de los dos, tus clientes van a poder elegir "Transferencia bancaria" al
+          pagar. El bot les manda estos datos por WhatsApp apenas hacen el pedido.
+        </p>
+
+        {transferLoading ? (
+          <LoadingState />
+        ) : (
+          <div className="mt-3 space-y-3">
+            <Input
+              label="Alias"
+              value={transferAlias}
+              disabled={!isOwner}
+              onChange={(e) => setTransferAlias(e.target.value)}
+              placeholder="mi.comercio.mp"
+            />
+            <Input
+              label="CBU / CVU"
+              value={transferCbu}
+              disabled={!isOwner}
+              onChange={(e) => setTransferCbu(e.target.value)}
+              placeholder="0000003100000000000000"
+            />
+
+            {transferError && <p className="text-sm text-red-600">{transferError}</p>}
+
+            {isOwner && (
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveTransfer}
+                  disabled={transferSaving}
+                  loading={transferSaving}
+                  loadingText="Guardando..."
+                >
+                  Guardar
+                </Button>
+                {transferSaved && <span className="text-sm text-emerald-600">Guardado ✓</span>}
+              </div>
+            )}
           </div>
         )}
       </Card>

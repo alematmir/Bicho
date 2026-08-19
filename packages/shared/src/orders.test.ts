@@ -28,6 +28,15 @@ describe('camino feliz', () => {
     expect(canTransition('PENDING_TRANSFER_VERIFICATION', 'PENDING_PAYMENT')).toBe(true);
   });
 
+  it('un pedido nacido en PENDING_PAYMENT llega a verificar transferencia cuando llega el comprobante', () => {
+    // create_order_atomic siempre arranca en PENDING_PAYMENT, sin importar el
+    // medio de pago (ver supabase/migrations/20260817000200_order_payment_method.sql).
+    // Recién pasa a PENDING_TRANSFER_VERIFICATION cuando el bot procesa la
+    // foto del comprobante — no antes. Sin esta transición, ningún pedido de
+    // la tienda podía llegar nunca a ese estado (docs/backlog.md).
+    expect(canTransition('PENDING_PAYMENT', 'PENDING_TRANSFER_VERIFICATION')).toBe(true);
+  });
+
   it('un pago fallido se puede reintentar', () => {
     expect(canTransition('PAYMENT_FAILED', 'PENDING_PAYMENT')).toBe(true);
     expect(canTransition('PAYMENT_EXPIRED', 'PENDING_PAYMENT')).toBe(true);

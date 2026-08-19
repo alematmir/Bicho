@@ -1,12 +1,13 @@
 import type { OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
-import { OrderCard } from './OrderCard';
+import { OrderCard, type TransferAction } from './OrderCard';
 
 type Props = {
   orders: OrderRow[];
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
+  onTransferAction: (order: OrderRow, action: TransferAction) => void;
 };
 
 /**
@@ -18,7 +19,7 @@ type Props = {
  * es más ceremonia que ayuda. Acá el estado sí va impreso en la tarjeta,
  * porque no hay columna que lo diga.
  */
-export function Grid({ orders, onAdvance, onCancel, onShowTimeline }: Props) {
+export function Grid({ orders, onAdvance, onCancel, onShowTimeline, onTransferAction }: Props) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {orders.map((order) => (
@@ -28,6 +29,7 @@ export function Grid({ orders, onAdvance, onCancel, onShowTimeline }: Props) {
           onAdvance={onAdvance}
           onCancel={onCancel}
           onShowTimeline={onShowTimeline}
+          onTransferAction={onTransferAction}
           showStatus
         />
       ))}

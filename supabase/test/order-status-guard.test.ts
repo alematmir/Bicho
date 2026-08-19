@@ -42,6 +42,18 @@ describe('transiciones válidas', () => {
       `select count(*)::int as n from public.order_events where order_id='${orderId}'`);
     expect(count.rows[0].n).toBe(4);
   });
+
+  it('un pedido por transferencia llega a verificación cuando llega el comprobante', async () => {
+    // create_order_atomic siempre arranca en PENDING_PAYMENT (ver
+    // 20260817000200_order_payment_method.sql) — recién pasa a
+    // PENDING_TRANSFER_VERIFICATION cuando el bot procesa la foto. Antes de
+    // 20260819000100_transfer_payment_schema.sql esta transición no existía y
+    // ningún pedido de la tienda podía llegar nunca a ese estado.
+    await asUser(db, ID.userA,
+      `update public.orders set status='PENDING_TRANSFER_VERIFICATION' where id='${orderId}'`);
+    const r = await db.query<{ status: string }>(`select status from public.orders where id='${orderId}'`);
+    expect(r.rows[0].status).toBe('PENDING_TRANSFER_VERIFICATION');
+  });
 });
 
 describe('transiciones inválidas', () => {

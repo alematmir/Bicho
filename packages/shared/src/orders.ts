@@ -32,7 +32,13 @@ const TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   CREATED: ['PENDING_PAYMENT', 'PENDING_TRANSFER_VERIFICATION', 'PAID', 'CANCELLED'],
 
   // PAID directo desde PENDING_PAYMENT cubre efectivo y pago en el local.
-  PENDING_PAYMENT: ['PAID', 'PAYMENT_FAILED', 'PAYMENT_EXPIRED', 'CANCELLED'],
+  // PENDING_TRANSFER_VERIFICATION es para transferencia bancaria: el pedido
+  // nace acá igual que cualquier otro (no hay comprobante todavía) y recién
+  // pasa a verificación cuando el cliente manda la foto por WhatsApp — ver
+  // docs/00-arquitectura.md §7.3. MANTENER EN SINCRONÍA con
+  // orders_valid_transition() en supabase/migrations (última definición:
+  // 20260819000100_transfer_payment_schema.sql).
+  PENDING_PAYMENT: ['PAID', 'PAYMENT_FAILED', 'PAYMENT_EXPIRED', 'PENDING_TRANSFER_VERIFICATION', 'CANCELLED'],
 
   // El comercio verifica el comprobante con un tap. Al rechazar vuelve atrás
   // para que el cliente pruebe de nuevo o elija otro medio. Ver §7.3.
@@ -140,4 +146,13 @@ export const TEMPLATE_KEYS = [
   'select_branch',
   'open_order',
   ...Object.values(NOTIFY_ON_ENTER),
+  // No están en NOTIFY_ON_ENTER porque no las dispara templateKeyFor(status):
+  // transfer_instructions sale al crear el pedido (no hay cambio de estado
+  // todavía), transfer_receipt_received la manda el webhook de WhatsApp
+  // directo al llegar la foto, y transfer_rejected viaja con un template_key
+  // explícito porque PENDING_PAYMENT es un estado ambiguo (también es el de
+  // creación y el de reintento tras PAYMENT_FAILED) — ver §7.3.
+  'transfer_instructions',
+  'transfer_receipt_received',
+  'transfer_rejected',
 ] as const;

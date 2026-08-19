@@ -15,7 +15,7 @@ export async function fetchStorefront(
 ): Promise<{ business: Business; branches: Branch[] }> {
   const { data: business, error: businessError } = await supabase
     .from('businesses')
-    .select('id, slug, name, logo_url, currency, brand_primary, brand_secondary')
+    .select('id, slug, name, logo_url, currency, brand_primary, brand_secondary, transfer_alias, transfer_cbu')
     .eq('slug', slug)
     .eq('is_active', true)
     .maybeSingle();

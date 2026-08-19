@@ -6,12 +6,21 @@ import {
   STALE_MINUTES, STATUS_LABEL,
 } from './orderPresentation';
 
+/** Las tres acciones dedicadas de un pedido esperando verificar transferencia. */
+export type TransferAction = 'verify' | 'reject' | 'view_evidence';
+
 export type OrderCardProps = {
   order: OrderRow;
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
   /** Abre el historial de quién movió el pedido. */
   onShowTimeline?: (order: OrderRow) => void;
+  /**
+   * "Ver comprobante" / "Verifiqué" / "Rechazar" — solo aplica a
+   * PENDING_TRANSFER_VERIFICATION, donde reemplaza a los botones genéricos de
+   * boardActions (que ahí ofrecerían "Pagado" a ciegas, sin comprobante).
+   */
+  onTransferAction?: (order: OrderRow, action: TransferAction) => void;
   /** Oculta el chip de estado en el tablero, donde ya lo dice la columna. */
   showStatus?: boolean;
   /** La tarjeta la está arrastrando el usuario. */
@@ -27,9 +36,19 @@ export type OrderCardProps = {
  * referencia secundaria, que es para lo que sirve.
  */
 export function OrderCard({
-  order, onAdvance, onCancel, onShowTimeline, showStatus = false, dragging = false,
+  order, onAdvance, onCancel, onShowTimeline, onTransferAction,
+  showStatus = false, dragging = false,
 }: OrderCardProps) {
-  const actions = boardActions(order.status, order.fulfillment_type).filter((s) => s !== 'CANCELLED');
+  // PENDING_TRANSFER_VERIFICATION tiene sus propios botones (abajo): los
+  // genéricos de boardActions acá ofrecerían "Pagado" a ciegas, sin haber
+  // visto el comprobante — ver docs/00-arquitectura.md §7.3.
+  const awaitingTransfer = order.status === 'PENDING_TRANSFER_VERIFICATION';
+  const actions = awaitingTransfer
+    ? []
+    : boardActions(order.status, order.fulfillment_type).filter((s) => s !== 'CANCELLED');
+  // Cancelar sigue disponible acá aunque los botones genéricos de avance no:
+  // es la única forma de sacar de encima un pedido que nadie va a verificar
+  // nunca (no hay vencimiento automático todavía, ver docs/backlog.md).
   const canCancel = boardActions(order.status, order.fulfillment_type).includes('CANCELLED');
   const { customerIds, releaseCustomer } = useWaiting();
   const waiting = order.customer_id !== null && customerIds.has(order.customer_id);
@@ -130,6 +149,29 @@ export function OrderCard({
             </span>
           )}
         </a>
+
+        {awaitingTransfer && onTransferAction && (
+          <>
+            <button
+              onClick={() => onTransferAction(order, 'view_evidence')}
+              className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+            >
+              Ver comprobante 🖼
+            </button>
+            <button
+              onClick={() => onTransferAction(order, 'verify')}
+              className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+            >
+              ✓ Verifiqué
+            </button>
+            <button
+              onClick={() => onTransferAction(order, 'reject')}
+              className="rounded-full border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+            >
+              ✗ Rechazar
+            </button>
+          </>
+        )}
 
         {actions.map((next) => (
           <button

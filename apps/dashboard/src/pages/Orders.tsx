@@ -2,15 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatArs, isTerminal, type OrderStatus } from '@bicho/shared';
 import { useBusiness } from '../state/business';
 import { supabase } from '../lib/supabase';
-import { cancelOrder, fetchOrders, updateOrderStatus, type OrderRow } from '../lib/orders';
 import {
-  Button, ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, SegmentedControl,
+  cancelOrder, fetchOrders, fetchTransferEvidenceUrl, rejectTransferPayment,
+  updateOrderStatus, verifyTransferPayment, type OrderRow,
+} from '../lib/orders';
+import {
+  Button, ConfirmDialog, EmptyState, ErrorState, LoadingState, Modal, PageHeader, SegmentedControl,
 } from '../components/ui';
 import { Board } from './orders/Board';
 import { List } from './orders/List';
 import { Grid } from './orders/Grid';
 import { History } from './orders/History';
 import { OrderTimeline } from './orders/OrderTimeline';
+import type { TransferAction } from './orders/OrderCard';
 import { customerLabel, isFromToday, itemsSummary } from './orders/orderPresentation';
 
 type View = 'tablero' | 'lista' | 'cards';
@@ -32,6 +36,10 @@ export function Orders() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<OrderRow | null>(null);
+  const [rejecting, setRejecting] = useState<OrderRow | null>(null);
+  const [evidenceOf, setEvidenceOf] = useState<OrderRow | null>(null);
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [timelineOf, setTimelineOf] = useState<OrderRow | null>(null);
 
@@ -120,6 +128,43 @@ export function Orders() {
   }
 
   /**
+   * Las tres acciones dedicadas de "Verificar transferencia" — ver §7.3.
+   * "Verifiqué" es un solo tap, sin diálogo: es la lectura literal de la spec
+   * ("un solo tap" para confirmar), a diferencia de cancelar o rechazar, que
+   * sí interrumpen porque son destructivos y quieren un motivo.
+   */
+  async function handleTransferAction(order: OrderRow, action: TransferAction) {
+    setActionError(null);
+
+    if (action === 'view_evidence') {
+      setEvidenceOf(order);
+      setEvidenceUrl(null);
+      setEvidenceError(null);
+      try {
+        const url = await fetchTransferEvidenceUrl(order.id);
+        setEvidenceUrl(url);
+        if (!url) setEvidenceError('No encontramos ningún comprobante para este pedido.');
+      } catch (err) {
+        setEvidenceError((err as Error).message);
+      }
+      return;
+    }
+
+    if (action === 'verify') {
+      try {
+        await verifyTransferPayment(order.id);
+        await load();
+      } catch (err) {
+        setActionError((err as Error).message);
+      }
+      return;
+    }
+
+    // 'reject' abre el diálogo con motivo — lo resuelve el ConfirmDialog de abajo.
+    setRejecting(order);
+  }
+
+  /**
    * Lo que hay que atender ahora. Las tres vistas muestran esto mismo: cambian
    * la forma, nunca el contenido. Lo terminado vive en el historial.
    *
@@ -185,7 +230,10 @@ export function Orders() {
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : showHistory ? (
-          <History orders={orders} onAdvance={handleAdvance} onCancel={setCancelling} onShowTimeline={setTimelineOf} />
+          <History
+            orders={orders} onAdvance={handleAdvance} onCancel={setCancelling}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+          />
         ) : orders.length === 0 ? (
           <EmptyState
             title="Todavía no entró ningún pedido"
@@ -202,11 +250,20 @@ export function Orders() {
             }
           />
         ) : view === 'tablero' ? (
-          <Board orders={boardOrders} onAdvance={handleAdvance} onCancel={setCancelling} onShowTimeline={setTimelineOf} />
+          <Board
+            orders={boardOrders} onAdvance={handleAdvance} onCancel={setCancelling}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+          />
         ) : view === 'lista' ? (
-          <List orders={operational} onAdvance={handleAdvance} onCancel={setCancelling} onShowTimeline={setTimelineOf} />
+          <List
+            orders={operational} onAdvance={handleAdvance} onCancel={setCancelling}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+          />
         ) : (
-          <Grid orders={operational} onAdvance={handleAdvance} onCancel={setCancelling} onShowTimeline={setTimelineOf} />
+          <Grid
+            orders={operational} onAdvance={handleAdvance} onCancel={setCancelling}
+            onShowTimeline={setTimelineOf} onTransferAction={handleTransferAction}
+          />
         )}
       </div>
 
@@ -248,6 +305,56 @@ export function Orders() {
             El motivo queda guardado en el historial del pedido. El cliente no lo ve.
           </p>
         </ConfirmDialog>
+      )}
+
+      {rejecting && (
+        <ConfirmDialog
+          title={`Rechazar la transferencia de ${customerLabel(rejecting)}`}
+          message="El pedido vuelve a esperar el pago y al cliente le llega un mensaje pidiéndole que revise el comprobante o elija otro medio."
+          confirmLabel="Sí, rechazar"
+          cancelLabel="No, volver"
+          reason={{
+            // ConfirmDialog vuelve obligatorio cualquier `reason` que se le
+            // pase (ver su `missingReason`) — no hay forma de dejarlo
+            // opcional sin tocar el componente compartido, así que queda
+            // obligatorio, igual que cancelar.
+            label: '¿Por qué se rechaza?',
+            placeholder: 'El monto no coincide, la foto no se lee...',
+          }}
+          onConfirm={async (reason) => {
+            await rejectTransferPayment(rejecting.id, reason);
+            await load();
+          }}
+          onClose={() => setRejecting(null)}
+        >
+          <div className="rounded-lg bg-neutral-50 px-3 py-2 text-xs">
+            <p className="font-medium text-neutral-700">
+              #{rejecting.number} · {formatArs(rejecting.total_cents)}
+            </p>
+          </div>
+          <p className="text-xs text-neutral-400">
+            El motivo queda guardado en el historial del pedido. El cliente no lo ve.
+          </p>
+        </ConfirmDialog>
+      )}
+
+      {evidenceOf && (
+        <Modal
+          title={`Comprobante · pedido #${evidenceOf.number}`}
+          onClose={() => { setEvidenceOf(null); setEvidenceUrl(null); setEvidenceError(null); }}
+        >
+          {evidenceError ? (
+            <p className="text-sm text-red-600">{evidenceError}</p>
+          ) : evidenceUrl ? (
+            <img
+              src={evidenceUrl}
+              alt={`Comprobante de transferencia del pedido #${evidenceOf.number}`}
+              className="max-h-[70vh] w-full rounded-lg object-contain"
+            />
+          ) : (
+            <LoadingState />
+          )}
+        </Modal>
       )}
     </div>
   );

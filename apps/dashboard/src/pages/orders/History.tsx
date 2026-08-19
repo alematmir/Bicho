@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { formatArs, isTerminal, type OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
 import { List } from './List';
+import type { TransferAction } from './OrderCard';
 import { EmptyState } from '../../components/ui';
 
 type Filter = 'todos' | 'entregados' | 'cancelados';
@@ -25,11 +26,13 @@ export function History({
   onAdvance,
   onCancel,
   onShowTimeline,
+  onTransferAction,
 }: {
   orders: OrderRow[];
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
   onShowTimeline: (order: OrderRow) => void;
+  onTransferAction: (order: OrderRow, action: TransferAction) => void;
 }) {
   const [filter, setFilter] = useState<Filter>('todos');
   const [search, setSearch] = useState('');
@@ -106,6 +109,7 @@ export function History({
           onAdvance={onAdvance}
           onCancel={onCancel}
           onShowTimeline={onShowTimeline}
+          onTransferAction={onTransferAction}
         />
       )}
 

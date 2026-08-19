@@ -50,7 +50,13 @@ export const BRANCH_BUTTON_PREFIX = 'branch:';
 export type InboundEvent =
   | { kind: 'text'; body: string }
   | { kind: 'button'; id: string }
-  /** Audio, imagen, ubicación, sticker: no los interpretamos. */
+  /**
+   * Una foto. Casi siempre es el comprobante de una transferencia — ver
+   * `awaitingTransferReceipt` en ConversationEnv. Fuera de ese contexto se
+   * trata igual que `unsupported` (handoff directo).
+   */
+  | { kind: 'image'; mediaId: string }
+  /** Audio, ubicación, sticker, documento: no los interpretamos. */
   | { kind: 'unsupported'; messageType: string }
   /** El dueño contestó desde su celular (webhook smb_message_echoes). */
   | { kind: 'owner_replied' }
@@ -77,6 +83,12 @@ export type ConversationEnv = {
   allowsInquiry: boolean;
   /** Si la sesión guardada en el contexto sigue viva (no venció). */
   sessionValid: boolean;
+  /**
+   * Si `activeOrderId` es un pedido por transferencia todavía sin
+   * comprobante (payment_method='transfer' && status='PENDING_PAYMENT'). Lo
+   * resuelve la Edge Function consultando la base — decide() sigue sin tocarla.
+   */
+  awaitingTransferReceipt: boolean;
 };
 
 // -----------------------------------------------------------------------------
@@ -100,7 +112,9 @@ export type Action =
   /** Texto suelto de message_templates. */
   | { type: 'send_template'; key: string }
   /** Avisa al dueño que alguien necesita atención humana. */
-  | { type: 'notify_owner_handoff'; reason: HandoffReason };
+  | { type: 'notify_owner_handoff'; reason: HandoffReason }
+  /** Llegó (probablemente) el comprobante de una transferencia pendiente. */
+  | { type: 'process_transfer_receipt'; orderId: string; mediaId: string };
 
 export type HandoffReason =
   /** Apretó el botón de consulta. */
@@ -302,15 +316,30 @@ export function decide(
     return { nextState: 'IDLE', nextContext: EMPTY_CONTEXT, actions: [] };
   }
 
+  // Una foto mientras se espera el comprobante de una transferencia: se
+  // procesa aparte de todo lo demás, incluso si un humano ya tomó la
+  // conversación (state === 'HUMAN') — es transaccional, no charla, mismo
+  // principio que las notificaciones de estado del pedido (ver el comentario
+  // de diseño #4 al principio del archivo).
+  if (event.kind === 'image' && env.awaitingTransferReceipt) {
+    return {
+      nextState: state,
+      nextContext: context,
+      actions: [
+        { type: 'process_transfer_receipt', orderId: context.activeOrderId!, mediaId: event.mediaId },
+      ],
+    };
+  }
+
   // En modo humano el bot no dice absolutamente nada. Solo lo saca de ahí un
   // timeout o que el dueño lo devuelva desde el dashboard.
   if (state === 'HUMAN') {
     return { nextState: 'HUMAN', nextContext: context, actions: [] };
   }
 
-  // Audio, foto, ubicación: no los leemos, y quien manda un audio quiere hablar
-  // con una persona. Escala directo, sin gastar intentos.
-  if (event.kind === 'unsupported') {
+  // Audio, foto fuera de contexto, ubicación: no los leemos, y quien manda un
+  // audio quiere hablar con una persona. Escala directo, sin gastar intentos.
+  if (event.kind === 'unsupported' || event.kind === 'image') {
     return handoff(context, 'unsupported_message');
   }
 

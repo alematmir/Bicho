@@ -11,6 +11,12 @@ export type Business = {
   /** Colores elegidos por el comercio. NULL = tienda con la paleta por defecto. */
   brand_primary: string | null;
   brand_secondary: string | null;
+  /**
+   * Si los dos son NULL, el checkout no ofrece "Transferencia bancaria": sin
+   * esto, el cliente la elige y nunca le llega ningún dato — ver Checkout.tsx.
+   */
+  transfer_alias: string | null;
+  transfer_cbu: string | null;
 };
 
 export type Branch = {

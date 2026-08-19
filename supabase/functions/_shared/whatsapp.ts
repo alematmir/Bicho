@@ -79,3 +79,34 @@ export async function getTemplate(businessId: string, key: string): Promise<stri
 export function fillTemplate(body: string, vars: Record<string, string>): string {
   return body.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? "");
 }
+
+// -----------------------------------------------------------------------------
+// Media entrante — comprobantes de transferencia, por ahora el único caso.
+// Dos pasos porque así es la Graph API: el id del mensaje solo trae un id de
+// media, hay que resolverlo a una URL firmada (que vence rápido) y recién ahí
+// bajar los bytes — las dos llamadas van con el mismo Bearer token.
+// -----------------------------------------------------------------------------
+export async function downloadMedia(
+  mediaId: string,
+): Promise<{ bytes: Uint8Array; contentType: string } | null> {
+  const metaRes = await fetch(`https://graph.facebook.com/v21.0/${mediaId}`, {
+    headers: { Authorization: `Bearer ${WA_TOKEN}` },
+  });
+  if (!metaRes.ok) {
+    console.error("no se pudo resolver el media:", await metaRes.text());
+    return null;
+  }
+  const meta = await metaRes.json() as { url?: string; mime_type?: string };
+  if (!meta.url) return null;
+
+  const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${WA_TOKEN}` } });
+  if (!fileRes.ok) {
+    console.error("no se pudo descargar el media:", await fileRes.text());
+    return null;
+  }
+
+  return {
+    bytes: new Uint8Array(await fileRes.arrayBuffer()),
+    contentType: meta.mime_type ?? fileRes.headers.get("content-type") ?? "application/octet-stream",
+  };
+}

@@ -58,27 +58,38 @@ export async function fetchOrders(businessId: string): Promise<OrderRow[]> {
 }
 
 /**
+ * Best-effort a propósito: si Meta está caído o el comercio no tiene
+ * WhatsApp conectado, la operación real (el UPDATE, el RPC) ya se hizo —
+ * no tiene sentido revertirla por un mensaje que no salió.
+ *
+ * `templateKey` pisa el mensaje que send-order-notification manda por
+ * default (`templateKeyFor(status)`). Hace falta para PENDING_PAYMENT, que a
+ * propósito no tiene entrada ahí: ese estado es ambiguo (creación, reintento
+ * tras PAYMENT_FAILED, rechazo de transferencia no deberían compartir texto)
+ * — ver rejectTransferPayment.
+ */
+async function notifyBestEffort(orderId: string, templateKey?: string): Promise<void> {
+  try {
+    await supabase.functions.invoke('send-order-notification', {
+      body: { order_id: orderId, template_key: templateKey },
+    });
+  } catch (err) {
+    console.error('no se pudo notificar al cliente por WhatsApp:', err);
+  }
+}
+
+/**
  * El UPDATE en sí es una escritura RLS común (orders_member_all). La
  * validación de que la transición sea válida, y el registro en el timeline,
  * los hace el trigger orders_guard_and_log_status en la base — ver
  * supabase/migrations/20260816001000_order_status_guard.sql. Acá no hace
  * falta duplicar esa lógica, solo dejar que el error del trigger suba tal cual
  * si alguien intenta algo inválido.
- *
- * Después de que el estado cambió de verdad, avisamos al cliente por
- * WhatsApp. Es best-effort a propósito: si Meta está caído o el comercio no
- * tiene WhatsApp conectado, el pedido ya cambió de estado igual — no tiene
- * sentido revertir una operación real por un mensaje que no salió.
  */
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
   const { error } = await supabase.from('orders').update({ status }).eq('id', orderId);
   if (error) throw error;
-
-  try {
-    await supabase.functions.invoke('send-order-notification', { body: { order_id: orderId } });
-  } catch (err) {
-    console.error('no se pudo notificar al cliente por WhatsApp:', err);
-  }
+  await notifyBestEffort(orderId);
 }
 
 /**
@@ -94,10 +105,62 @@ export async function cancelOrder(orderId: string, reason: string): Promise<void
     p_reason: reason || null,
   });
   if (error) throw error;
+  await notifyBestEffort(orderId);
+}
 
-  try {
-    await supabase.functions.invoke('send-order-notification', { body: { order_id: orderId } });
-  } catch (err) {
-    console.error('no se pudo notificar al cliente por WhatsApp:', err);
-  }
+/**
+ * "Verifiqué la transferencia": un solo tap, ver docs/00-arquitectura.md
+ * §7.3. El RPC hace todo en una operación (pasa a PAID, descuenta stock,
+ * marca el pago como aprobado) — acá solo queda avisar al cliente, con el
+ * mismo mensaje que cualquier otro "pago confirmado" (PAID ya tiene
+ * `order_paid`, no hace falta pisarlo).
+ */
+export async function verifyTransferPayment(orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('verify_transfer_payment', { p_order_id: orderId });
+  if (error) throw error;
+  await notifyBestEffort(orderId);
+}
+
+/**
+ * "Rechazar": el comprobante no sirvió. Vuelve a PENDING_PAYMENT para que el
+ * cliente reintente o elija otro medio — con un mensaje propio
+ * (`transfer_rejected`), no el genérico de ese estado (que no existe a
+ * propósito, ver notifyBestEffort).
+ */
+export async function rejectTransferPayment(orderId: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('reject_transfer_payment', {
+    p_order_id: orderId,
+    p_reason: reason || null,
+  });
+  if (error) throw error;
+  await notifyBestEffort(orderId, 'transfer_rejected');
+}
+
+/**
+ * Signed URL del comprobante pendiente de este pedido, o null si no hay
+ * ninguno (no debería pasar mientras el pedido esté en
+ * PENDING_TRANSFER_VERIFICATION, pero la UI no asume). El bucket es privado
+ * — ver 20260819000100_transfer_payment_schema.sql — así que no hay URL
+ * pública que mostrar directo.
+ */
+export async function fetchTransferEvidenceUrl(orderId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('evidence_url')
+    .eq('order_id', orderId)
+    .eq('method', 'transfer')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.evidence_url) return null;
+
+  const { data: signed, error: signError } = await supabase
+    .storage
+    .from('payment-evidence')
+    .createSignedUrl(data.evidence_url, 3600);
+  if (signError) throw signError;
+
+  return signed?.signedUrl ?? null;
 }

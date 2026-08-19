@@ -14,9 +14,11 @@
 // =============================================================================
 import "@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { toE164 } from "../../../packages/shared/src/phone.ts";
+import { toE164, toWhatsAppSendFormat } from "../../../packages/shared/src/phone.ts";
 import { isInStock } from "../../../packages/shared/src/inventory.ts";
+import { formatArs } from "../../../packages/shared/src/money.ts";
 import { clientIp, withinRateLimit } from "../_shared/rate_limit.ts";
+import { fillTemplate, getTemplate, sendText } from "../_shared/whatsapp.ts";
 
 const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -322,6 +324,44 @@ Deno.serve(async (req) => {
     }
   } catch (e) {
     console.error("no se pudo enlazar el pedido a la conversación:", e);
+  }
+
+  // Transferencia bancaria: el alias/CBU y el pedido de comprobante van por
+  // WhatsApp, no por acá — ver docs/00-arquitectura.md §7.3. Best-effort,
+  // mismo criterio que el enlace a la conversación de arriba: el pedido ya
+  // está creado y confirmado, no vale la pena romper la compra por esto. No
+  // debería faltar nunca el alias/CBU o el WhatsApp conectado porque el
+  // checkout oculta la opción sin eso — pero si pasa, que quede en el log en
+  // vez de fallar en silencio.
+  if (input.payment_method === "transfer") {
+    try {
+      const [{ data: biz }, { data: wa }] = await Promise.all([
+        supabaseAdmin.from("businesses")
+          .select("transfer_alias, transfer_cbu").eq("id", business.id).maybeSingle(),
+        supabaseAdmin.from("whatsapp_accounts")
+          .select("phone_number_id").eq("business_id", business.id).eq("status", "connected").maybeSingle(),
+      ]);
+
+      const bankLines = [
+        biz?.transfer_alias ? `Alias: ${biz.transfer_alias}` : null,
+        biz?.transfer_cbu ? `CBU/CVU: ${biz.transfer_cbu}` : null,
+      ].filter((l): l is string => l !== null);
+
+      if (bankLines.length === 0 || !wa) {
+        console.error("pedido por transferencia sin alias/CBU o sin WhatsApp conectado:", {
+          business_id: business.id, hasBankData: bankLines.length > 0, hasWhatsApp: !!wa,
+        });
+      } else {
+        const body = fillTemplate(await getTemplate(business.id, "transfer_instructions"), {
+          order_number: String(row.number),
+          amount: formatArs(row.total_cents),
+          bank_details: bankLines.join("\n"),
+        });
+        if (body) await sendText(wa.phone_number_id, toWhatsAppSendFormat(phone), body);
+      }
+    } catch (e) {
+      console.error("no se pudieron mandar los datos de transferencia:", e);
+    }
   }
 
   return Response.json(

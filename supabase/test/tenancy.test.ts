@@ -119,4 +119,15 @@ describe('acceso anónimo (la tienda no tiene sesión)', () => {
     );
     expect(r.rows).toHaveLength(1);
   });
+
+  // transfer_alias/transfer_cbu no son un dato sensible: existen justamente
+  // para que el comprador los tenga (ver 20260819000100_transfer_payment_schema.sql).
+  // Confirma que el grant explícito los suma sin abrir el resto de la tabla.
+  it('puede leer el alias/CBU de transferencia', async () => {
+    const r = await asAnon(
+      db,
+      `select transfer_alias, transfer_cbu from public.businesses where id='${ID.businessA}'`,
+    );
+    expect(r.rows).toHaveLength(1);
+  });
 });

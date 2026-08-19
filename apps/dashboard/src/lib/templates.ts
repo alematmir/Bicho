@@ -17,6 +17,9 @@ export class TemplateError extends Error {}
  * MANTENER EN SINCRONÍA con lo que cada Edge Function le pasa a fillTemplate:
  *   welcome / handoff_to_human / not_understood → whatsapp-webhook, con business
  *   order_*                                     → send-order-notification, con order_number
+ *   transfer_instructions                       → create-order, con order_number/amount/bank_details
+ *   transfer_receipt_received                   → whatsapp-webhook, sin variables
+ *   transfer_rejected                            → send-order-notification (template_key), con order_number
  */
 export const PLACEHOLDERS: Record<string, { name: string; example: string }[]> = {
   welcome: [{ name: 'business', example: 'Mats Market' }],
@@ -30,6 +33,13 @@ export const PLACEHOLDERS: Record<string, { name: string; example: string }[]> =
   order_cancelled: [{ name: 'order_number', example: '1043' }],
   select_branch: [],
   open_order: [{ name: 'order_number', example: '1043' }],
+  transfer_instructions: [
+    { name: 'order_number', example: '1043' },
+    { name: 'amount', example: '$12.500' },
+    { name: 'bank_details', example: 'Alias: mats.market.mp' },
+  ],
+  transfer_receipt_received: [],
+  transfer_rejected: [{ name: 'order_number', example: '1043' }],
 };
 
 /** Nombre y contexto de cada mensaje, en castellano. */
@@ -60,6 +70,18 @@ export const TEMPLATE_LABELS: Record<string, { title: string; when: string }> = 
   order_out_for_delivery: { title: 'En camino', when: 'Cuando movés el pedido a En camino.' },
   order_payment_failed: { title: 'Pago rechazado', when: 'Cuando Mercado Pago rechaza el pago.' },
   order_cancelled: { title: 'Pedido cancelado', when: 'Cuando cancelás el pedido.' },
+  transfer_instructions: {
+    title: 'Datos para transferir',
+    when: 'Apenas el cliente elige pagar por transferencia bancaria.',
+  },
+  transfer_receipt_received: {
+    title: 'Comprobante recibido',
+    when: 'Cuando el cliente manda la foto del comprobante por WhatsApp.',
+  },
+  transfer_rejected: {
+    title: 'Transferencia rechazada',
+    when: 'Cuando tocás "Rechazar" en un comprobante que no sirve.',
+  },
 };
 
 /**

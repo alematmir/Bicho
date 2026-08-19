@@ -10,6 +10,7 @@ const env = (over: Partial<ConversationEnv> = {}): ConversationEnv => ({
   branchCount: 1,
   allowsInquiry: true,
   sessionValid: false,
+  awaitingTransferReceipt: false,
   ...over,
 });
 
@@ -245,6 +246,41 @@ describe('después de mandar el link', () => {
   });
 });
 
+describe('comprobante de transferencia', () => {
+  it('una foto mientras se espera el comprobante se procesa, sin escalar', () => {
+    const d = decide('LINK_SENT', ctx({ activeOrderId: 'order-7' }),
+      { kind: 'image', mediaId: 'wamid.foto1' },
+      env({ awaitingTransferReceipt: true }));
+
+    expect(d.nextState).toBe('LINK_SENT');
+    expect(d.actions).toEqual([
+      { type: 'process_transfer_receipt', orderId: 'order-7', mediaId: 'wamid.foto1' },
+    ]);
+  });
+
+  it('se procesa igual aunque un humano ya haya tomado la conversación', () => {
+    // Es transaccional, no charla — mismo criterio que las notificaciones de
+    // estado del pedido (comentario de diseño #4 al principio del archivo).
+    const d = decide('HUMAN', ctx({ activeOrderId: 'order-7' }),
+      { kind: 'image', mediaId: 'wamid.foto1' },
+      env({ awaitingTransferReceipt: true }));
+
+    expect(d.nextState).toBe('HUMAN');
+    expect(d.actions).toEqual([
+      { type: 'process_transfer_receipt', orderId: 'order-7', mediaId: 'wamid.foto1' },
+    ]);
+  });
+
+  it('sin un comprobante esperado, una foto escala como cualquier adjunto', () => {
+    const d = decide('AWAITING_ACTION', ctx(),
+      { kind: 'image', mediaId: 'wamid.foto2' }, env({ awaitingTransferReceipt: false }));
+
+    expect(d.nextState).toBe('HUMAN');
+    const handoff = d.actions.find(a => a.type === 'notify_owner_handoff');
+    expect(handoff).toMatchObject({ reason: 'unsupported_message' });
+  });
+});
+
 describe('vuelta del cliente tras un tiempo', () => {
   it('la inactividad resetea a IDLE desde cualquier estado', () => {
     for (const state of CONVERSATION_STATES) {
@@ -329,6 +365,7 @@ describe('integridad de la máquina', () => {
     { kind: 'button', id: 'branch:x' },
     { kind: 'button', id: 'desconocido' },
     { kind: 'unsupported', messageType: 'audio' },
+    { kind: 'image', mediaId: 'wamid.x' },
     { kind: 'owner_replied' },
     { kind: 'timeout' },
   ];

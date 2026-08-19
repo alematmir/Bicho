@@ -47,6 +47,10 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
   const [fulfillment, setFulfillment] = useState<FulfillmentType>(
     branch.accepts_delivery ? 'delivery' : 'pickup',
   );
+  // Sin alias ni CBU cargados, el comercio no puede recibir una transferencia:
+  // ofrecer la opción igual sería un callejón sin salida (el cliente la
+  // elige y nunca le llega ningún dato). Ver docs/00-arquitectura.md §7.3.
+  const acceptsTransfer = Boolean(business.transfer_alias || business.transfer_cbu);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mercadopago');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -214,12 +218,14 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
               title="Efectivo"
               subtitle={fulfillment === 'delivery' ? 'Pagás al recibir el pedido' : 'Pagás al retirar'}
             />
-            <PaymentOption
-              active={paymentMethod === 'transfer'}
-              onClick={() => setPaymentMethod('transfer')}
-              title="Transferencia bancaria"
-              subtitle="Te pasamos los datos por WhatsApp para mandar el comprobante"
-            />
+            {acceptsTransfer && (
+              <PaymentOption
+                active={paymentMethod === 'transfer'}
+                onClick={() => setPaymentMethod('transfer')}
+                title="Transferencia bancaria"
+                subtitle="Te pasamos los datos por WhatsApp para mandar el comprobante"
+              />
+            )}
           </div>
         </section>
 
