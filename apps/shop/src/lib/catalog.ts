@@ -25,6 +25,21 @@ export async function fetchBusinessWhatsAppNumber(slug: string): Promise<string 
   return data ?? null;
 }
 
+/**
+ * Respaldo para la pantalla de confirmación cuando no llega `payment_method`
+ * por el `state` de navegación (refresh, volver a esa URL más tarde) — ver
+ * OrderConfirmation.tsx. Mismo criterio de función angosta que
+ * fetchBusinessWhatsAppNumber: `orders` no tiene policy de anon.
+ */
+export async function fetchOrderPaymentMethod(
+  slug: string,
+  number: number,
+): Promise<'mercadopago' | 'cash' | 'transfer' | null> {
+  const { data, error } = await supabase.rpc('order_payment_method', { p_slug: slug, p_number: number });
+  if (error) throw error;
+  return data ?? null;
+}
+
 /** Paso 1: resolver el comercio por slug, y sus sucursales activas. */
 export async function fetchStorefront(
   slug: string,

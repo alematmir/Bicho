@@ -1,17 +1,35 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { Money } from '../components/Money';
-import { fetchBusinessWhatsAppNumber } from '../lib/catalog';
+import { fetchBusinessWhatsAppNumber, fetchOrderPaymentMethod } from '../lib/catalog';
+
+type PaymentMethod = 'mercadopago' | 'cash' | 'transfer';
 
 type ConfirmationState = {
   totalCents?: number;
-  paymentMethod?: 'mercadopago' | 'cash' | 'transfer';
+  paymentMethod?: PaymentMethod;
 };
 
 export function OrderConfirmation() {
   const { slug, orderNumber } = useParams<{ slug: string; orderNumber: string }>();
   const location = useLocation();
-  const { totalCents, paymentMethod } = (location.state as ConfirmationState | null) ?? {};
+  const { totalCents, paymentMethod: fromState } = (location.state as ConfirmationState | null) ?? {};
+
+  // El `state` de navegación se pierde si el cliente refresca esta página o
+  // vuelve a esta URL más tarde (una pestaña reabierta, "atrás" del
+  // navegador) — ahí `fromState` viene undefined aunque el pedido sea por
+  // transferencia. Sin este respaldo, justo el caso donde más importa (el
+  // cliente todavía tiene que mandar el comprobante) caía en el mensaje
+  // genérico de "te avisamos por WhatsApp", que no dice que hay algo
+  // pendiente de su lado.
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | undefined>(fromState);
+
+  useEffect(() => {
+    if (paymentMethod || !slug || !orderNumber) return;
+    fetchOrderPaymentMethod(slug, Number(orderNumber))
+      .then((m) => { if (m) setPaymentMethod(m); })
+      .catch(() => {});
+  }, [paymentMethod, slug, orderNumber]);
 
   // Solo hace falta para transferencia: es el único caso donde el cliente
   // tiene que volver a hacer algo (mandar el comprobante) antes de que el
