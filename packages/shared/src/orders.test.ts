@@ -8,7 +8,7 @@ describe('camino feliz', () => {
   it('delivery llega de punta a punta', () => {
     const camino: OrderStatus[] = [
       'CREATED', 'PENDING_PAYMENT', 'PAID', 'PREPARING', 'READY',
-      'OUT_FOR_DELIVERY', 'DELIVERED',
+      'OUT_FOR_DELIVERY', 'DISPATCHED', 'DELIVERY_CONFIRMED',
     ];
     for (let i = 0; i < camino.length - 1; i++) {
       expect(canTransition(camino[i], camino[i + 1])).toBe(true);
@@ -56,13 +56,22 @@ describe('transiciones prohibidas', () => {
 
   it('los estados terminales no van a ningún lado', () => {
     expect(nextStatuses('DELIVERED')).toEqual([]);
+    expect(nextStatuses('DELIVERY_CONFIRMED')).toEqual([]);
     expect(nextStatuses('CANCELLED')).toEqual([]);
     expect(isTerminal('DELIVERED')).toBe(true);
+    expect(isTerminal('DELIVERY_CONFIRMED')).toBe(true);
     expect(isTerminal('CANCELLED')).toBe(true);
   });
 
   it('un pedido entregado no se puede cancelar', () => {
     expect(canTransition('DELIVERED', 'CANCELLED')).toBe(false);
+    expect(canTransition('DELIVERY_CONFIRMED', 'CANCELLED')).toBe(false);
+  });
+
+  it('un pedido ya enviado tampoco: salió del local', () => {
+    // DISPATCHED no es terminal (todavía falta que el cadete confirme), pero
+    // igual no admite cancelar — mismo criterio que antes tenía DELIVERED.
+    expect(canTransition('DISPATCHED', 'CANCELLED')).toBe(false);
   });
 
   it('assertTransition lanza con el detalle', () => {
@@ -72,18 +81,22 @@ describe('transiciones prohibidas', () => {
 });
 
 describe('cancelación', () => {
-  it('se puede cancelar en cualquier estado no terminal', () => {
+  it('se puede cancelar en cualquier estado no terminal, salvo el que ya salió del local', () => {
+    // DISPATCHED es la única excepción: no es terminal (falta la confirmación
+    // del cadete) pero tampoco se puede cancelar, ver el test dedicado arriba.
     for (const status of ORDER_STATUSES) {
-      if (isTerminal(status)) continue;
+      if (isTerminal(status) || status === 'DISPATCHED') continue;
       expect(canTransition(status, 'CANCELLED')).toBe(true);
     }
   });
 });
 
 describe('estados cobrados', () => {
-  it('cuentan desde PAID hasta DELIVERED', () => {
-    expect(['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED']
-      .every(s => isPaid(s as OrderStatus))).toBe(true);
+  it('cuentan desde PAID hasta el cierre, en cualquiera de los dos caminos', () => {
+    expect([
+      'PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DISPATCHED',
+      'DELIVERY_CONFIRMED', 'DELIVERED',
+    ].every(s => isPaid(s as OrderStatus))).toBe(true);
   });
 
   it('no cuentan los previos ni los fallidos', () => {
@@ -105,6 +118,16 @@ describe('botones del tablero', () => {
     expect(acciones).not.toContain('OUT_FOR_DELIVERY');
   });
 
+  it('en camino solo ofrece marcar enviado', () => {
+    const acciones = boardActions('OUT_FOR_DELIVERY', 'delivery');
+    expect(acciones).toEqual(['DISPATCHED', 'CANCELLED']);
+  });
+
+  it('enviado solo ofrece confirmar la entrega, sin poder cancelar', () => {
+    const acciones = boardActions('DISPATCHED', 'delivery');
+    expect(acciones).toEqual(['DELIVERY_CONFIRMED']);
+  });
+
   it('nunca ofrece una transición que la máquina rechaza', () => {
     for (const status of ORDER_STATUSES) {
       for (const fulfillment of ['delivery', 'pickup'] as const) {
@@ -124,10 +147,18 @@ describe('avisos al cliente', () => {
     expect(templateKeyFor('OUT_FOR_DELIVERY')).toBe('order_out_for_delivery');
   });
 
-  it('NO avisa la entrega: el sistema no puede saber si llegó', () => {
-    // Ver docs/00-arquitectura.md §5.2. Cuando reparte un cadete, nadie le
-    // avisa a la plataforma. Un aviso falso es peor que no avisar.
+  it('NO avisa el cierre manual del comercio: todavía no hay confirmación real', () => {
+    // Ver docs/00-arquitectura.md §5.2. DISPATCHED es el mismo cierre que
+    // antes hacía DELIVERED para delivery — un aviso acá seguiría siendo una
+    // suposición, no un hecho.
+    expect(templateKeyFor('DISPATCHED')).toBeNull();
+    // DELIVERED sigue sin avisar tampoco: es el terminal de pickup, y esa
+    // entrega ya la sabe el cliente porque la retiró él mismo.
     expect(templateKeyFor('DELIVERED')).toBeNull();
+  });
+
+  it('SÍ avisa cuando el cadete confirma la entrega de verdad', () => {
+    expect(templateKeyFor('DELIVERY_CONFIRMED')).toBe('order_delivered');
   });
 
   it('no avisa estados internos', () => {

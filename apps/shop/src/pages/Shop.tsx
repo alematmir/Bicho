@@ -102,7 +102,14 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
       <header className="border-b border-neutral-200 bg-white px-4 py-5">
         <div className="flex items-center gap-3">
           {state.business.logo_url && (
-            <img src={state.business.logo_url} alt="" className="h-12 w-12 rounded-full object-cover" />
+            // object-contain, no object-cover: un isologo apaisado (con
+            // texto) se recorta feo si se lo obliga a llenar un círculo
+            // chico — ver el mismo comentario en apps/dashboard/Sidebar.tsx.
+            <img
+              src={state.business.logo_url}
+              alt=""
+              className="h-12 w-12 rounded-full border border-neutral-100 bg-white object-contain p-1"
+            />
           )}
           <div>
             <h1 className="text-xl font-semibold text-neutral-900">{state.business.name}</h1>

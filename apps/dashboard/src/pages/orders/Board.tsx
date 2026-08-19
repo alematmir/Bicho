@@ -7,7 +7,7 @@ import { boardActions, formatArs, type OrderStatus } from '@bicho/shared';
 import type { OrderRow } from '../../lib/orders';
 import { OrderCard, type TransferAction } from './OrderCard';
 import {
-  ALWAYS_VISIBLE_COLUMNS, BOARD_COLUMNS, STATUS_LABEL, STATUS_TONE,
+  ALWAYS_VISIBLE_COLUMN_KEYS, BOARD_COLUMNS, STATUS_TONE, type BoardColumn,
 } from './orderPresentation';
 
 type Props = {
@@ -40,21 +40,31 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
   function handleDragEnd(event: DragEndEvent) {
     setDraggingId(null);
     const order = orders.find((o) => o.id === event.active.id);
-    const target = event.over?.id as OrderStatus | undefined;
-    if (!order || !target || target === order.status) return;
+    const columnKey = event.over?.id as string | undefined;
+    if (!order || !columnKey) return;
 
-    // Soltar en una columna inválida no llega a la base. El trigger igual lo
-    // rechazaría, pero un error rojo por algo que la interfaz ya sabía que no
-    // se podía es culpa de la interfaz.
-    if (!boardActions(order.status, order.fulfillment_type).includes(target)) return;
+    if (columnKey === 'CANCELLED') {
+      if (boardActions(order.status, order.fulfillment_type).includes('CANCELLED')) onCancel(order);
+      return;
+    }
 
-    if (target === 'CANCELLED') onCancel(order);
-    else onAdvance(order, target);
+    // Una columna puede agrupar más de un estado (ver DELIVERED en
+    // orderPresentation.ts) — el estado real al que va el pedido es el que
+    // de verdad puede alcanzar DESDE donde está, no cualquiera de los que
+    // muestra la columna. Soltar en una columna inválida no llega a la base:
+    // el trigger igual lo rechazaría, pero un error rojo por algo que la
+    // interfaz ya sabía que no se podía es culpa de la interfaz.
+    const column = BOARD_COLUMNS.find((c) => c.key === columnKey);
+    const target = column
+      && boardActions(order.status, order.fulfillment_type).find((s) => column.statuses.includes(s));
+    if (!target || target === order.status) return;
+
+    onAdvance(order, target);
   }
 
   const visibleColumns = BOARD_COLUMNS.filter(
-    (status) =>
-      orders.some((o) => o.status === status) || ALWAYS_VISIBLE_COLUMNS.includes(status),
+    (col) =>
+      orders.some((o) => col.statuses.includes(o.status)) || ALWAYS_VISIBLE_COLUMN_KEYS.includes(col.key),
   );
 
   return (
@@ -64,20 +74,31 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDraggingId(null)}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {visibleColumns.map((status) => (
+      {/* Kanban de verdad: siempre en fila, con su propio scroll horizontal.
+          Apilar las columnas en mobile sacaba el scroll horizontal pero
+          perdía la gracia del tablero (ver cómo avanza cada columna de un
+          vistazo). En cambio, el ancho de columna es responsive (Column de
+          abajo) y OrderCard se achica solo con el viewport — así en una
+          pantalla angosta entra más antes de tener que scrollear, sin
+          cambiar la forma del tablero. */}
+      <div className="flex gap-3 overflow-x-auto pb-4">
+        {visibleColumns.map((col) => (
           <Column
-            key={status}
-            status={status}
-            orders={orders.filter((o) => o.status === status)}
+            key={col.key}
+            column={col}
+            orders={orders.filter((o) => col.statuses.includes(o.status))}
             onAdvance={onAdvance}
             onCancel={onCancel}
             onShowTimeline={onShowTimeline}
             onTransferAction={onTransferAction}
             draggingId={draggingId}
             // Mientras no se arrastra nada, ninguna columna está apagada.
-            dimmed={dragging !== null && status !== dragging.status && !allowed.includes(status)}
-            highlighted={allowed.includes(status)}
+            dimmed={
+              dragging !== null
+              && !col.statuses.includes(dragging.status)
+              && !allowed.some((s) => col.statuses.includes(s))
+            }
+            highlighted={allowed.some((s) => col.statuses.includes(s))}
           />
         ))}
 
@@ -88,7 +109,7 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
           original y la columna colapsa mientras dura el arrastre. */}
       <DragOverlay dropAnimation={null}>
         {dragging && (
-          <div className="w-80 rotate-2 opacity-95">
+          <div className="w-60 rotate-2 opacity-95 sm:w-72 lg:w-80">
             <OrderCard order={dragging} onAdvance={() => {}} onCancel={() => {}} dragging />
           </div>
         )}
@@ -98,9 +119,9 @@ export function Board({ orders, onAdvance, onCancel, onShowTimeline, onTransferA
 }
 
 function Column({
-  status, orders, onAdvance, onCancel, onShowTimeline, onTransferAction, draggingId, dimmed, highlighted,
+  column, orders, onAdvance, onCancel, onShowTimeline, onTransferAction, draggingId, dimmed, highlighted,
 }: {
-  status: OrderStatus;
+  column: BoardColumn;
   orders: OrderRow[];
   onAdvance: (order: OrderRow, next: OrderStatus) => void;
   onCancel: (order: OrderRow) => void;
@@ -110,14 +131,16 @@ function Column({
   dimmed: boolean;
   highlighted: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
-  const tone = STATUS_TONE[status];
+  const { setNodeRef, isOver } = useDroppable({ id: column.key });
+  // Con más de un estado agrupado (DELIVERED), los dos comparten el mismo
+  // tono en STATUS_TONE, así que da lo mismo cuál de los dos se use acá.
+  const tone = STATUS_TONE[column.statuses[0]];
   const total = orders.reduce((sum, o) => sum + o.total_cents, 0);
 
   return (
     <section
       ref={setNodeRef}
-      className={`flex w-80 shrink-0 flex-col rounded-2xl border transition-all ${
+      className={`flex w-60 shrink-0 flex-col rounded-2xl border transition-all sm:w-72 lg:w-80 ${
         isOver && highlighted
           ? 'border-brand-400 bg-brand-50/60'
           : highlighted
@@ -129,7 +152,7 @@ function Column({
       <div className={`h-1 rounded-t-2xl ${tone.bar}`} />
 
       <header className="flex items-baseline justify-between px-3 py-2.5">
-        <h2 className="text-sm font-semibold text-neutral-800">{STATUS_LABEL[status]}</h2>
+        <h2 className="text-sm font-semibold text-neutral-800">{column.label}</h2>
         <span className="flex items-center gap-1.5">
           {total > 0 && (
             <span className="text-xs text-neutral-400">{formatArs(total)}</span>
@@ -203,7 +226,7 @@ function CancelZone() {
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-52 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center text-sm font-medium transition-colors ${
+      className={`flex w-48 shrink-0 items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center text-sm font-medium transition-colors sm:w-56 lg:w-64 ${
         isOver ? 'border-red-400 bg-red-50 text-red-700' : 'border-neutral-300 text-neutral-400'
       }`}
     >

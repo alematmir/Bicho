@@ -21,7 +21,15 @@ type BusinessContextValue = {
    * que ya tenía.
    */
   error: string | null;
+  /** Solo dueño/empleado: lo único que opera este dashboard. */
   memberships: Membership[];
+  /**
+   * Distinto de `memberships.length === 0`: esto es true cuando la cuenta SÍ
+   * tiene membresías, pero todas son de cadete — no tiene sentido ofrecerle
+   * "crear un comercio" (Onboarding) a alguien que ya pertenece a uno, solo
+   * que por acá no hace nada.
+   */
+  cadeteOnly: boolean;
   /** El comercio activo en el dashboard. Con uno solo, se elige automático. */
   current: Membership | null;
   setCurrent: (businessId: string) => void;
@@ -33,6 +41,7 @@ const BusinessContext = createContext<BusinessContextValue | null>(null);
 export function BusinessProvider({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [cadeteOnly, setCadeteOnly] = useState(false);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +49,7 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   async function fetchMemberships() {
     if (!session) {
       setMemberships([]);
+      setCadeteOnly(false);
       setError(null);
       setLoading(false);
       return;
@@ -47,6 +57,11 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
     setLoading(true);
     setError(null);
+    // Trae TODAS las membresías (dueño, empleado y cadete) — hace falta para
+    // poder distinguir "no tiene ningún comercio" de "tiene, pero es cadete y
+    // este dashboard no es para él" (ver `cadeteOnly` más abajo). Filtrar por
+    // rol acá, no en la query: business_users_self_read ya solo devuelve las
+    // propias filas de este usuario.
     const { data, error } = await supabase
       .from('business_users')
       .select('business_id, role, display_name, businesses(slug, name, logo_url)')
@@ -59,17 +74,20 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const rows: Membership[] = (data ?? [])
-      .filter((r) => r.businesses)
+    const all = (data ?? []).filter((r) => r.businesses);
+
+    const rows: Membership[] = all
+      .filter((r) => r.role === 'owner' || r.role === 'staff')
       .map((r) => {
         const b = r.businesses as unknown as { slug: string; name: string; logo_url: string | null };
         return {
-          business_id: r.business_id, role: r.role, slug: b.slug, name: b.name,
+          business_id: r.business_id, role: r.role as 'owner' | 'staff', slug: b.slug, name: b.name,
           logo_url: b.logo_url, display_name: r.display_name,
         };
       });
 
     setMemberships(rows);
+    setCadeteOnly(all.length > 0 && rows.length === 0);
     setCurrentId((prev) => prev ?? rows[0]?.business_id ?? null);
     setLoading(false);
   }
@@ -83,7 +101,10 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
 
   return (
     <BusinessContext.Provider
-      value={{ loading, error, memberships, current, setCurrent: setCurrentId, refetch: fetchMemberships }}
+      value={{
+        loading, error, memberships, cadeteOnly, current,
+        setCurrent: setCurrentId, refetch: fetchMemberships,
+      }}
     >
       {children}
     </BusinessContext.Provider>

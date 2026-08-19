@@ -7,12 +7,15 @@ import { asUser, freshDb, ID, type Db } from './helpers/db';
 let db: Db;
 let orderId: string;
 
-async function newOrder(status = 'PENDING_PAYMENT') {
+async function newOrder(status = 'PENDING_PAYMENT', fulfillment: 'pickup' | 'delivery' = 'pickup') {
   const id = crypto.randomUUID();
+  // delivery_address es obligatorio cuando fulfillment_type = 'delivery' (check
+  // constraint en 20260816000400_orders.sql) — un snapshot cualquiera alcanza.
+  const address = fulfillment === 'delivery' ? `'{"street":"Test 123"}'::jsonb` : 'null';
   await db.exec(`insert into public.orders (id, business_id, branch_id, customer_id,
-                                            status, fulfillment_type, total_cents)
+                                            status, fulfillment_type, delivery_address, total_cents)
                  values ('${id}','${ID.businessA}','${ID.branchA}','${ID.customerA}',
-                         '${status}','pickup', 1000)`);
+                         '${status}','${fulfillment}', ${address}, 1000)`);
   return id;
 }
 
@@ -43,6 +46,15 @@ describe('transiciones válidas', () => {
     expect(count.rows[0].n).toBe(4);
   });
 
+  it('el camino de delivery pasa por enviado antes de entregado', async () => {
+    const delivery = await newOrder('PENDING_PAYMENT', 'delivery');
+    for (const status of ['PAID', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DISPATCHED', 'DELIVERY_CONFIRMED']) {
+      await asUser(db, ID.userA, `update public.orders set status='${status}' where id='${delivery}'`);
+    }
+    const r = await db.query<{ status: string }>(`select status from public.orders where id='${delivery}'`);
+    expect(r.rows[0].status).toBe('DELIVERY_CONFIRMED');
+  });
+
   it('un pedido por transferencia llega a verificación cuando llega el comprobante', async () => {
     // create_order_atomic siempre arranca en PENDING_PAYMENT (ver
     // 20260817000200_order_payment_method.sql) — recién pasa a
@@ -70,6 +82,27 @@ describe('transiciones inválidas', () => {
     const delivered = await newOrder('DELIVERED');
     await expect(
       asUser(db, ID.userA, `update public.orders set status='PAID' where id='${delivered}'`),
+    ).rejects.toThrow(/Transición de pedido inválida/);
+  });
+
+  it('un pedido con entrega confirmada tampoco admite más cambios', async () => {
+    const confirmed = await newOrder('DELIVERY_CONFIRMED', 'delivery');
+    await expect(
+      asUser(db, ID.userA, `update public.orders set status='PAID' where id='${confirmed}'`),
+    ).rejects.toThrow(/Transición de pedido inválida/);
+  });
+
+  it('un pedido enviado no se puede cancelar: ya salió del local', async () => {
+    const dispatched = await newOrder('DISPATCHED', 'delivery');
+    await expect(
+      asUser(db, ID.userA, `update public.orders set status='CANCELLED' where id='${dispatched}'`),
+    ).rejects.toThrow(/Transición de pedido inválida/);
+  });
+
+  it('no se puede saltear el paso de "enviado" e ir directo a entregado', async () => {
+    const outForDelivery = await newOrder('OUT_FOR_DELIVERY', 'delivery');
+    await expect(
+      asUser(db, ID.userA, `update public.orders set status='DELIVERY_CONFIRMED' where id='${outForDelivery}'`),
     ).rejects.toThrow(/Transición de pedido inválida/);
   });
 

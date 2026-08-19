@@ -97,7 +97,9 @@ describe('pedidos', () => {
 
     await db.exec(`update public.orders set status = 'PREPARING' where id = '${id}'`);
     await db.exec(`update public.orders set status = 'READY' where id = '${id}'`);
-    await db.exec(`update public.orders set status = 'OUT_FOR_DELIVERY' where id = '${id}'`);
+    // nuevoPedido() es 'pickup': de READY pasa directo a DELIVERED, sin
+    // OUT_FOR_DELIVERY (que es exclusivo del camino de delivery — ver
+    // packages/shared/src/orders.ts).
     await db.exec(`update public.orders set status = 'DELIVERED' where id = '${id}'`);
 
     const r = await db.query(`select type from public.notifications`);

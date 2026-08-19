@@ -58,64 +58,74 @@ export function OrderCard({
 
   return (
     <div
-      className={`rounded-xl border bg-white p-3 transition-shadow ${
+      className={`rounded-xl border bg-white p-2.5 transition-shadow sm:p-3 ${
         dragging ? 'border-brand-400 shadow-lg' : 'border-neutral-200 shadow-sm hover:shadow-md'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-neutral-900">{customerLabel(order)}</p>
+          <p className="truncate text-sm font-semibold text-neutral-900 sm:text-base">{customerLabel(order)}</p>
           {/* El número, grande y en negrita: es lo que se canta en el
               mostrador y lo que el cliente tiene en la mano. */}
           <p className="mt-0.5 flex items-baseline gap-2">
-            <span className="text-lg font-bold leading-none text-neutral-800">
+            <span className="text-base font-bold leading-none text-neutral-800 sm:text-lg">
               #{order.number}
             </span>
             <span className="text-xs text-neutral-400">{placedAtLabel(order.placed_at)}</span>
           </p>
         </div>
-        <span className="shrink-0 font-semibold text-neutral-900">
+        <span className="shrink-0 text-sm font-semibold text-neutral-900 sm:text-base">
           {formatArs(order.total_cents)}
         </span>
       </div>
 
-      {summary && <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{summary}</p>}
+      {/* En una pantalla angosta (columna del tablero apretada) un solo
+          renglón alcanza para ubicarse; el resto ya está en la tarjeta si
+          hace falta abrirla. De sm: para arriba, con más aire, se ve
+          completo. */}
+      {summary && (
+        <p className="mt-1.5 line-clamp-1 text-xs text-neutral-600 sm:mt-2 sm:line-clamp-2 sm:text-sm">
+          {summary}
+        </p>
+      )}
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] sm:mt-2 sm:gap-1.5 sm:text-xs">
+        <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-neutral-600 sm:px-2">
           {order.fulfillment_type === 'delivery' ? 'Envío' : 'Retiro'}
         </span>
+        {/* El medio de pago es el chip menos urgente de leer: el primero que
+            se saca de encima cuando la columna está apretada. */}
         {order.payment_method && (
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
+          <span className="hidden rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600 sm:inline-flex">
             {PAYMENT_LABEL[order.payment_method] ?? order.payment_method}
           </span>
         )}
         {showStatus && (
-          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-neutral-600">
+          <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-neutral-600 sm:px-2">
             {STATUS_LABEL[order.status]}
           </span>
         )}
         {order.refund_status !== 'none' && (
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700 sm:px-2">
             {order.refund_status === 'full' ? 'Devuelto' : 'Devuelto parcial'}
           </span>
         )}
         {/* Un pedido que lleva mucho en la misma columna es un reclamo que
             todavía no llegó. Marcarlo cuesta nada y se ve de reojo. */}
         {stale && (
-          <span className="rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-600">
+          <span className="rounded-full bg-red-50 px-1.5 py-0.5 font-medium text-red-600 sm:px-2">
             {waitingMin >= 60 ? `${Math.floor(waitingMin / 60)} h` : `${waitingMin} min`}
           </span>
         )}
       </div>
 
       {order.customer_notes && (
-        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-900">
+        <p className="mt-1.5 line-clamp-1 rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-900 sm:mt-2 sm:line-clamp-none">
           {order.customer_notes}
         </p>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap gap-1 sm:mt-3 sm:gap-1.5">
         {/* El teléfono va en el link de WhatsApp, no impreso: ocupa una línea
             entera y casi nunca se lee, se toca.
 
@@ -135,7 +145,7 @@ export function OrderCard({
               ? `${formatForDisplay(order.customer_phone)} — está esperando que le contestes`
               : formatForDisplay(order.customer_phone)
           }
-          className={`relative rounded-full px-2.5 py-1 text-xs font-medium ${
+          className={`relative rounded-full px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs ${
             waiting
               ? 'bg-[#25D366] text-white hover:opacity-90'
               : 'border border-neutral-200 text-neutral-600 hover:bg-neutral-50'
@@ -154,19 +164,19 @@ export function OrderCard({
           <>
             <button
               onClick={() => onTransferAction(order, 'view_evidence')}
-              className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+              className="rounded-full border border-neutral-200 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-neutral-600 hover:bg-neutral-50"
             >
               Ver comprobante 🖼
             </button>
             <button
               onClick={() => onTransferAction(order, 'verify')}
-              className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+              className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-white hover:bg-emerald-700"
             >
               ✓ Verifiqué
             </button>
             <button
               onClick={() => onTransferAction(order, 'reject')}
-              className="rounded-full border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+              className="rounded-full border border-red-200 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-red-500 hover:bg-red-50"
             >
               ✗ Rechazar
             </button>
@@ -177,7 +187,7 @@ export function OrderCard({
           <button
             key={next}
             onClick={() => onAdvance(order, next)}
-            className="rounded-full bg-brand-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-brand-700"
+            className="rounded-full bg-brand-600 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-white hover:bg-brand-700"
           >
             {STATUS_LABEL[next]}
           </button>
@@ -191,7 +201,7 @@ export function OrderCard({
           <button
             onClick={() => releaseCustomer(order.customer_id!)}
             title="El bot vuelve a atenderlo"
-            className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+            className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-emerald-700 hover:bg-emerald-100"
           >
             ✓ Ya lo atendí
           </button>
@@ -201,7 +211,7 @@ export function OrderCard({
           <button
             onClick={() => onShowTimeline(order)}
             title="Quién movió este pedido"
-            className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-50"
+            className="rounded-full border border-neutral-200 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-neutral-500 hover:bg-neutral-50"
           >
             Historial
           </button>
@@ -210,7 +220,7 @@ export function OrderCard({
         {canCancel && (
           <button
             onClick={() => onCancel(order)}
-            className="rounded-full border border-red-200 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50"
+            className="rounded-full border border-red-200 px-2 py-0.5 text-[11px] font-medium sm:px-2.5 sm:py-1 sm:text-xs text-red-500 hover:bg-red-50"
           >
             Cancelar
           </button>

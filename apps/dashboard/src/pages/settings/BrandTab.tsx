@@ -73,7 +73,9 @@ export function BrandTab() {
   if (loading) return <LoadingState />;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    // Una sola columna siempre, en cualquier ancho: el preview va debajo del
+    // formulario, no al costado como columna aparte en desktop.
+    <div className="max-w-xl space-y-6">
       <div className="space-y-6">
         <section>
           <h2 className="text-sm font-semibold text-neutral-900">Logo</h2>
@@ -82,9 +84,13 @@ export function BrandTab() {
           </p>
 
           <div className="mt-3 flex items-center gap-4">
-            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-white">
+            {/* object-contain, no object-cover: un isologo apaisado (con
+                texto) se recorta feo si se lo obliga a llenar una caja
+                cuadrada. Con contain se ve completo, con aire alrededor si
+                hace falta. */}
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-white p-2">
               {logoUrl ? (
-                <img src={logoUrl} alt="Logo del comercio" className="h-full w-full object-cover" />
+                <img src={logoUrl} alt="Logo del comercio" className="h-full w-full object-contain" />
               ) : (
                 <span className="text-xs text-neutral-400">Sin logo</span>
               )}
@@ -256,7 +262,7 @@ function StorePreview({
   const secondaryInk = readableTextOn(secondary);
 
   return (
-    <div className="lg:sticky lg:top-6 lg:self-start">
+    <div>
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-400">
         Así lo ve tu cliente
       </p>
@@ -264,7 +270,11 @@ function StorePreview({
       <Card className="overflow-hidden !p-0">
         <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-3">
           {logoUrl ? (
-            <img src={logoUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+            <img
+              src={logoUrl}
+              alt=""
+              className="h-8 w-8 rounded-full border border-neutral-100 bg-white object-contain p-0.5"
+            />
           ) : (
             <div className="h-8 w-8 rounded-full bg-neutral-100" />
           )}

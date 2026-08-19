@@ -6,8 +6,10 @@ import {
   suggestPassword, USERNAME_RE, type StaffMember,
 } from '../../lib/staff';
 import {
-  Badge, Button, Card, ConfirmDialog, ErrorState, Input, LoadingState, Modal,
+  Badge, Button, Card, ConfirmDialog, ErrorState, Input, LoadingState, Modal, SegmentedControl,
 } from '../../components/ui';
+
+const DELIVERY_BASE_URL = import.meta.env.VITE_DELIVERY_BASE_URL ?? '';
 
 export function UsersTab() {
   const { current } = useBusiness();
@@ -41,6 +43,13 @@ export function UsersTab() {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState message={error} onRetry={load} />;
 
+  const hayCadetes = members.some((m) => m.role === 'cadete');
+  // Mismo query param que Login.tsx (?comercio=slug): username es único POR
+  // COMERCIO (business_users_username_uniq), no global, así que el portal de
+  // reparto necesita el comercio igual que un empleado — no hay forma de
+  // resolverlo solo con el usuario.
+  const deliveryUrl = DELIVERY_BASE_URL ? `${DELIVERY_BASE_URL}/?comercio=${current.slug}` : '';
+
   return (
     <div className="max-w-2xl space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -70,7 +79,10 @@ export function UsersTab() {
       </div>
 
       {/* El link que el dueño le pasa al empleado, con el comercio ya cargado:
-          uno menos de los tres datos que tiene que recordar para entrar. */}
+          uno menos de los tres datos que tiene que recordar para entrar. Los
+          cadetes entran por otra dirección (envio.bicho.com.ar) — mismo
+          truco de ?comercio=, pero ESTE link no les sirve: es el panel del
+          comercio, y RequireBusiness los rechaza si entran ahí. */}
       <Card>
         <p className="text-xs font-medium text-neutral-500">Link para que entre tu equipo</p>
         <p className="mt-1 break-all font-mono text-sm text-brand-700">
@@ -78,9 +90,27 @@ export function UsersTab() {
         </p>
         <p className="mt-2 text-xs text-neutral-400">
           Con este link ya les queda cargado el comercio: solo escriben su usuario y su
-          contraseña.
+          contraseña. Para los cadetes es distinto: entran en su propio panel de reparto.
         </p>
       </Card>
+
+      {hayCadetes && (
+        <Card>
+          <p className="text-xs font-medium text-neutral-500">Link para tus cadetes</p>
+          {deliveryUrl ? (
+            <p className="mt-1 break-all font-mono text-sm text-brand-700">{deliveryUrl}</p>
+          ) : (
+            <p className="mt-1 text-sm text-neutral-500">
+              Todavía no está configurado. Mientras tanto pueden entrar a envio.bicho.com.ar y
+              escribir el comercio a mano: <span className="font-mono">{current.slug}</span>.
+            </p>
+          )}
+          <p className="mt-2 text-xs text-neutral-400">
+            Mismo mecanismo que el de arriba, con el comercio ya cargado: el cadete solo escribe
+            su usuario y su contraseña, en el panel de reparto en vez de en este.
+          </p>
+        </Card>
+      )}
 
       {creating && (
         <CreateStaffModal
@@ -144,8 +174,8 @@ function MemberRow({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-medium text-neutral-900">{name}</p>
-            <Badge tone={member.role === 'owner' ? 'brand' : 'neutral'}>
-              {member.role === 'owner' ? 'Dueño' : 'Empleado'}
+            <Badge tone={member.role === 'owner' ? 'brand' : member.role === 'cadete' ? 'success' : 'neutral'}>
+              {member.role === 'owner' ? 'Dueño' : member.role === 'cadete' ? 'Cadete' : 'Empleado'}
             </Badge>
             {isMe && <Badge tone="success">Vos</Badge>}
             {!member.is_active && <Badge tone="danger">Dado de baja</Badge>}
@@ -198,6 +228,7 @@ function CreateStaffModal({
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState(suggestPassword);
+  const [role, setRole] = useState<'staff' | 'cadete'>('staff');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<{ username: string; password: string } | null>(null);
@@ -213,6 +244,7 @@ function CreateStaffModal({
         username,
         display_name: displayName,
         password,
+        role,
       });
       // La clave se muestra UNA vez, después de crear: no se puede volver a
       // ver porque no la guardamos en ningún lado, solo su hash.
@@ -281,6 +313,24 @@ function CreateStaffModal({
       }
     >
       <div className="space-y-4">
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-neutral-700">Qué hace</p>
+          <SegmentedControl
+            label="Qué hace"
+            value={role}
+            onChange={setRole}
+            options={[
+              { id: 'staff', label: 'Empleado' },
+              { id: 'cadete', label: 'Cadete' },
+            ]}
+          />
+          <p className="mt-1.5 text-xs text-neutral-400">
+            {role === 'cadete'
+              ? 'Entra en envio.bicho.com.ar, no acá. Solo ve los pedidos en camino y puede marcarlos entregados.'
+              : 'Entra acá, con lo mismo que ves vos salvo lo que administra el negocio.'}
+          </p>
+        </div>
+
         <Input
           label="Nombre y apellido"
           autoFocus

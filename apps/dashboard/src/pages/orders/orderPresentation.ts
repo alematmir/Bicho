@@ -9,38 +9,69 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   PREPARING: 'Preparando',
   READY: 'Listo',
   OUT_FOR_DELIVERY: 'En camino',
+  // El comercio cierra su parte acá — antes esto se llamaba DELIVERED y
+  // decía "Entregado", pero no era una confirmación real (ver §5.2). Ahora
+  // "Entregado" queda reservado para DELIVERY_CONFIRMED, que sí lo es.
+  DISPATCHED: 'Enviado',
+  // DELIVERED sigue diciendo "Entregado": es el terminal de retiro en
+  // sucursal (READY → DELIVERED), y ahí sí es una entrega confirmada —
+  // el cliente lo retira en persona.
   DELIVERED: 'Entregado',
+  // La confirmación real del camino de delivery: la dispara el cadete desde
+  // envio.bicho.com.ar (o, en su ausencia, el comercio a mano).
+  DELIVERY_CONFIRMED: 'Entregado',
   CANCELLED: 'Cancelado',
   PAYMENT_FAILED: 'Pago fallido',
   PAYMENT_EXPIRED: 'Pago vencido',
 };
 
 /**
+ * Una columna del tablero puede agrupar más de un estado — ver DELIVERED más
+ * abajo. `key` es el id estable de la columna (para React y para
+ * useDroppable); no siempre coincide con un OrderStatus.
+ */
+export type BoardColumn = { key: string; label: string; statuses: readonly OrderStatus[] };
+
+/**
  * Columnas del tablero, en el orden en que se ve avanzar un pedido.
  *
- * Los estados terminales (DELIVERED/CANCELLED) no tienen columna: una vez ahí,
- * el pedido sale del radar operativo del día. Se siguen viendo en la vista de
- * lista, que es la que sirve para buscar algo viejo.
+ * Los estados terminales (DELIVERED/DELIVERY_CONFIRMED/CANCELLED) no tienen
+ * columna propia más allá de hoy: una vez ahí, el pedido sale del radar
+ * operativo del día. Se siguen viendo en la vista de lista, que es la que
+ * sirve para buscar algo viejo.
  */
-export const BOARD_COLUMNS: OrderStatus[] = [
-  'PENDING_PAYMENT',
-  'PENDING_TRANSFER_VERIFICATION',
-  'PAID',
-  'PREPARING',
-  'READY',
-  'OUT_FOR_DELIVERY',
-  'DELIVERED',
+export const BOARD_COLUMNS: BoardColumn[] = [
+  { key: 'PENDING_PAYMENT', label: STATUS_LABEL.PENDING_PAYMENT, statuses: ['PENDING_PAYMENT'] },
+  {
+    key: 'PENDING_TRANSFER_VERIFICATION', label: STATUS_LABEL.PENDING_TRANSFER_VERIFICATION,
+    statuses: ['PENDING_TRANSFER_VERIFICATION'],
+  },
+  { key: 'PAID', label: STATUS_LABEL.PAID, statuses: ['PAID'] },
+  { key: 'PREPARING', label: STATUS_LABEL.PREPARING, statuses: ['PREPARING'] },
+  { key: 'READY', label: STATUS_LABEL.READY, statuses: ['READY'] },
+  { key: 'OUT_FOR_DELIVERY', label: STATUS_LABEL.OUT_FOR_DELIVERY, statuses: ['OUT_FOR_DELIVERY'] },
+  { key: 'DISPATCHED', label: STATUS_LABEL.DISPATCHED, statuses: ['DISPATCHED'] },
+  // DELIVERED (retiro en sucursal) y DELIVERY_CONFIRMED (delivery confirmado
+  // por el cadete) son, para quien mira el tablero, la misma idea: "listo, se
+  // terminó". Mostrarlos como dos columnas que dicen las dos "Entregado" era
+  // ruido visual sin ninguna decisión nueva que tomar ahí — se combinan en
+  // una sola. Internamente siguen siendo dos estados distintos (ver
+  // packages/shared/src/orders.ts); el drop se resuelve al estado real según
+  // el pedido que se suelta, en Board.tsx.
+  { key: 'DELIVERED', label: 'Entregado', statuses: ['DELIVERED', 'DELIVERY_CONFIRMED'] },
 ];
 
 /** Columnas que se muestran aunque estén vacías: son el flujo normal del día. */
-export const ALWAYS_VISIBLE_COLUMNS: OrderStatus[] = ['PAID', 'PREPARING', 'READY', 'DELIVERED'];
+export const ALWAYS_VISIBLE_COLUMN_KEYS: string[] = ['PAID', 'PREPARING', 'READY', 'DISPATCHED', 'DELIVERED'];
 
 /**
- * DELIVERED es terminal: si se mostrara completo, la columna crecería sin
- * techo y en una semana taparía al resto. Se limita a los del día, que es el
- * único período en que sirve verlos — para saber qué se despachó hoy. El
- * resto vive en el historial.
+ * Terminales que igual se muestran en el tablero mientras sean de hoy: sirven
+ * para saber qué se despachó/entregó hoy. Si se mostraran completos, la
+ * columna crecería sin techo y en una semana taparía al resto. El resto vive
+ * en el historial.
  */
+export const SAME_DAY_TERMINAL_STATUSES: readonly OrderStatus[] = ['DELIVERED', 'DELIVERY_CONFIRMED'];
+
 export function isFromToday(iso: string): boolean {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
@@ -68,7 +99,9 @@ export const STATUS_TONE: Record<
   PREPARING: { chip: 'bg-brand-100 text-brand-700', bar: 'bg-brand-400', tone: 'brand' },
   READY: { chip: 'bg-brand-100 text-brand-700', bar: 'bg-brand-600', tone: 'brand' },
   OUT_FOR_DELIVERY: { chip: 'bg-sky-100 text-sky-800', bar: 'bg-sky-500', tone: 'brand' },
+  DISPATCHED: { chip: 'bg-sky-100 text-sky-900', bar: 'bg-sky-600', tone: 'brand' },
   DELIVERED: { chip: 'bg-neutral-100 text-neutral-500', bar: 'bg-neutral-300', tone: 'neutral' },
+  DELIVERY_CONFIRMED: { chip: 'bg-neutral-100 text-neutral-500', bar: 'bg-neutral-300', tone: 'neutral' },
   CANCELLED: { chip: 'bg-neutral-100 text-neutral-500', bar: 'bg-neutral-300', tone: 'neutral' },
   PAYMENT_FAILED: { chip: 'bg-red-100 text-red-700', bar: 'bg-red-400', tone: 'danger' },
   PAYMENT_EXPIRED: { chip: 'bg-red-100 text-red-700', bar: 'bg-red-400', tone: 'danger' },

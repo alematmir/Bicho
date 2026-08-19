@@ -15,7 +15,9 @@ import { Grid } from './orders/Grid';
 import { History } from './orders/History';
 import { OrderTimeline } from './orders/OrderTimeline';
 import type { TransferAction } from './orders/OrderCard';
-import { customerLabel, isFromToday, itemsSummary } from './orders/orderPresentation';
+import {
+  customerLabel, isFromToday, itemsSummary, SAME_DAY_TERMINAL_STATUSES,
+} from './orders/orderPresentation';
 
 type View = 'tablero' | 'lista' | 'cards';
 
@@ -168,8 +170,9 @@ export function Orders() {
    * Lo que hay que atender ahora. Las tres vistas muestran esto mismo: cambian
    * la forma, nunca el contenido. Lo terminado vive en el historial.
    *
-   * La excepción es DELIVERED del día, que el tablero sí muestra en su propia
-   * columna para saber qué se despachó hoy.
+   * La excepción son los terminales del día (DELIVERED de pickup,
+   * DELIVERY_CONFIRMED de delivery), que el tablero sí muestra en su propia
+   * columna para saber qué se despachó/entregó hoy.
    */
   const operational = useMemo(
     () => orders.filter((o) => !isTerminal(o.status)),
@@ -178,7 +181,8 @@ export function Orders() {
 
   const boardOrders = useMemo(
     () => orders.filter(
-      (o) => !isTerminal(o.status) || (o.status === 'DELIVERED' && isFromToday(o.placed_at)),
+      (o) => !isTerminal(o.status)
+        || (SAME_DAY_TERMINAL_STATUSES.includes(o.status) && isFromToday(o.placed_at)),
     ),
     [orders],
   );

@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+/* La misma paleta que el dashboard y el admin: es el mismo producto. */
+@theme {
+  --color-brand-50: #f1eefe;
+  --color-brand-100: #e4defd;
+  --color-brand-200: #cbbffb;
+  --color-brand-300: #ac99f7;
+  --color-brand-400: #8b71f1;
+  --color-brand-500: #6247e8;
+  --color-brand-600: #5138d4;
+  --color-brand-700: #422dae;
+  --color-brand-800: #37278a;
+  --color-brand-900: #2e2270;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-neutral-50 text-neutral-900 antialiased;
+  overflow-x: hidden;
+}
+
+@layer base {
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}

@@ -4,6 +4,7 @@ import type { OrderRow } from '../../lib/orders';
 import { List } from './List';
 import type { TransferAction } from './OrderCard';
 import { EmptyState } from '../../components/ui';
+import { SAME_DAY_TERMINAL_STATUSES } from './orderPresentation';
 
 type Filter = 'todos' | 'entregados' | 'cancelados';
 
@@ -42,7 +43,7 @@ export function History({
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     return closed.filter((o) => {
-      if (filter === 'entregados' && o.status !== 'DELIVERED') return false;
+      if (filter === 'entregados' && !SAME_DAY_TERMINAL_STATUSES.includes(o.status)) return false;
       if (filter === 'cancelados' && o.status !== 'CANCELLED') return false;
       if (!q) return true;
       // Se busca por lo que una persona recuerda: el nombre, el número, o algo

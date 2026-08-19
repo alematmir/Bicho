@@ -32,6 +32,11 @@
 
 body {
   @apply bg-neutral-50 text-neutral-900 antialiased;
+  /* Salvaguarda: la página en sí nunca scrollea horizontal, pase lo que
+     pase adentro. Los contenedores que sí necesitan scroll horizontal
+     (el tablero de pedidos, las tablas anchas) lo declaran ellos mismos
+     con overflow-x-auto — eso queda contenido adentro, no se nota acá. */
+  overflow-x: hidden;
 }
 
 /* El anillo de foco es accesibilidad, no decoración: se ve igual en todos los

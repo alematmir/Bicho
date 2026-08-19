@@ -72,10 +72,29 @@ function RequireAuth() {
  * duplicar el que ya existe — así que ahí se muestra el error, no el alta.
  */
 function RequireBusiness() {
-  const { loading, error, current, refetch } = useBusiness();
+  const { loading, error, current, cadeteOnly, refetch } = useBusiness();
   const { signOut } = useAuth();
 
   if (loading) return <CenteredMessage>Cargando...</CenteredMessage>;
+
+  // Antes de `error`: una cuenta de cadete no tiene nada que hacer acá, sea
+  // cual sea el estado de la red. Mostrarle Onboarding (como si no tuviera
+  // ningún comercio) la invitaría a crear uno de cero, que es peor que este
+  // mensaje.
+  if (cadeteOnly) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="font-medium text-neutral-800">Esta cuenta es de reparto.</p>
+        <p className="max-w-sm text-sm text-neutral-500">
+          Este panel es para el comercio. Para ver y confirmar tus entregas, entrá en{' '}
+          <span className="font-mono">envio.bicho.com.ar</span> con el mismo usuario.
+        </p>
+        <button onClick={() => signOut()} className="mt-2 text-sm text-neutral-500 underline">
+          Cerrar sesión
+        </button>
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -146,7 +165,10 @@ function Shell() {
           <Sidebar />
 
           <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-neutral-50/90 px-6 backdrop-blur">
+            {/* `justify-end`: sin el botón de menú (vive adentro del propio
+                Sidebar ahora), no hay riesgo de que un hijo único se pegue a
+                la izquierda con `ml-auto` de más. */}
+            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-neutral-50/90 px-4 backdrop-blur sm:px-6">
               <WaitingButton onOpen={openAttention} />
               <NotificationBell />
             </header>

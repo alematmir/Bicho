@@ -21,6 +21,8 @@ export const ID = {
   userB:     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
   /** Empleado del comercio A. Miembro, pero no dueño. */
   staffA:    'a5a5a5a5-a5a5-a5a5-a5a5-a5a5a5a5a5a5',
+  /** Cadete del comercio A. No es "miembro" (is_member) — acceso acotado. */
+  cadeteA:   'ca4e7e00-ca4e-ca4e-ca4e-ca4e7e00ca4e',
   branchA:   '22222222-2222-2222-2222-222222222222',
   branchB:   '2b2b2b2b-2b2b-2b2b-2b2b-2b2b2b2b2b2b',
   customerA: '33333333-3333-3333-3333-333333333333',
@@ -132,7 +134,8 @@ export async function freshDb(): Promise<Db> {
 /** Dos comercios con datos propios: sin eso no se puede probar el aislamiento. */
 async function seed(db: Db) {
   await db.exec(`
-    insert into auth.users (id) values ('${ID.userA}'), ('${ID.userB}'), ('${ID.staffA}');
+    insert into auth.users (id) values
+      ('${ID.userA}'), ('${ID.userB}'), ('${ID.staffA}'), ('${ID.cadeteA}');
 
     insert into public.businesses (id, slug, name) values
       ('${ID.businessA}', 'ruddys', 'Ruddys'),
@@ -141,7 +144,8 @@ async function seed(db: Db) {
     insert into public.business_users (business_id, user_id, role) values
       ('${ID.businessA}', '${ID.userA}', 'owner'),
       ('${ID.businessB}', '${ID.userB}', 'owner'),
-      ('${ID.businessA}', '${ID.staffA}', 'staff');
+      ('${ID.businessA}', '${ID.staffA}', 'staff'),
+      ('${ID.businessA}', '${ID.cadeteA}', 'cadete');
 
     insert into public.branches (id, business_id, name) values
       ('${ID.branchA}', '${ID.businessA}', 'Centro'),

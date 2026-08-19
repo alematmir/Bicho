@@ -104,7 +104,12 @@ async function createStaff(
   const username = (body.username ?? "").trim().toLowerCase();
   const displayName = (body.display_name ?? "").trim();
   const password = body.password ?? "";
-  const role = body.role === "owner" ? "owner" : "staff";
+  // "owner" nunca llega desde el alta del dashboard (esa fila la crea el
+  // negocio al crearse, no este endpoint) — se deja el caso igual porque ya
+  // estaba. "cadete" es nuevo: un repartidor, sin acceso a este dashboard,
+  // solo al portal de reparto (envio.bicho.com.ar) — ver
+  // 20260819000700_delivery_confirmation.sql.
+  const role = body.role === "owner" ? "owner" : body.role === "cadete" ? "cadete" : "staff";
 
   if (!USERNAME_RE.test(username)) {
     return fail(
@@ -135,7 +140,7 @@ async function createStaff(
     // Confirmado de entrada: no hay casilla a la que mandarle nada, y sin esto
     // el login quedaría bloqueado esperando una confirmación que nunca llega.
     email_confirm: true,
-    user_metadata: { display_name: displayName, business_id: businessId, kind: "staff" },
+    user_metadata: { display_name: displayName, business_id: businessId, kind: role },
   });
 
   if (createError || !created.user) {
