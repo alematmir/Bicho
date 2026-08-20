@@ -58,13 +58,33 @@ export async function fetchDeliveries(): Promise<DeliveryOrder[]> {
 }
 
 /**
+ * send-order-notification no la dispara la base sola — lo dice su propio
+ * comentario: "cualquier otro lugar que cambie orders.status tiene que
+ * acordarse de llamar a esto también". apps/dashboard/src/lib/orders.ts ya
+ * lo hace para sus transiciones; este es ESE otro lugar. Mismo criterio
+ * best-effort que ahí: el RPC ya movió el pedido, así que un WhatsApp que no
+ * salió no amerita deshacer la entrega.
+ */
+async function notifyBestEffort(orderId: string): Promise<void> {
+  try {
+    await supabase.functions.invoke('send-order-notification', { body: { order_id: orderId } });
+  } catch (err) {
+    console.error('no se pudo notificar al cliente por WhatsApp:', err);
+  }
+}
+
+/**
  * El único movimiento que puede hacer un cadete. Va por RPC, no por un
  * UPDATE — ver el comentario largo en confirm_delivery(),
- * 20260819000700_delivery_confirmation.sql.
+ * 20260819000700_delivery_confirmation.sql. templateKeyFor('DELIVERY_CONFIRMED')
+ * es 'order_delivered' — acá SÍ se avisa, a diferencia de DISPATCHED: el
+ * cadete confirmándolo es la única vez que el sistema sabe de verdad que
+ * llegó, ver orders.ts.
  */
 export async function confirmDelivery(orderId: string): Promise<void> {
   const { error } = await supabase.rpc('confirm_delivery', { p_order_id: orderId });
   if (error) throw error;
+  await notifyBestEffort(orderId);
 }
 
 /** "Costanera 1234, piso 2 depto B" — lo que hace falta para tocar timbre. */
