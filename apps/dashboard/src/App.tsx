@@ -168,7 +168,13 @@ function Shell() {
             {/* `justify-end`: sin el botón de menú (vive adentro del propio
                 Sidebar ahora), no hay riesgo de que un hijo único se pegue a
                 la izquierda con `ml-auto` de más. */}
-            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-neutral-50/90 px-4 backdrop-blur sm:px-6">
+            {/* Fondo sólido, sin backdrop-blur: la combinación de sticky +
+                blur sobre transparencia es un bug conocido de Chrome — el
+                navegador no repinta bien el desenfoque al scrollear y quedan
+                restos fantasma de contenido viejo pegados en la franja del
+                header. El body ya es bg-neutral-50 opaco, así que un header
+                opaco se ve exactamente igual sin ese riesgo. */}
+            <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center justify-end gap-2 border-b border-neutral-200 bg-neutral-50 px-4 sm:px-6">
               <WaitingButton onOpen={openAttention} />
               <NotificationBell />
             </header>
