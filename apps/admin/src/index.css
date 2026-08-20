@@ -1,17 +1,19 @@
 @import "tailwindcss";
 
-/* La misma paleta que el dashboard: es el mismo producto visto desde arriba. */
+/* La misma paleta que el dashboard: es el mismo producto visto desde arriba.
+ * brand-500 es el #4046f5 de la marca; ver el comentario largo en
+ * apps/dashboard/src/index.css para el detalle de cómo sale el resto. */
 @theme {
-  --color-brand-50: #f1eefe;
-  --color-brand-100: #e4defd;
-  --color-brand-200: #cbbffb;
-  --color-brand-300: #ac99f7;
-  --color-brand-400: #8b71f1;
-  --color-brand-500: #6247e8;
-  --color-brand-600: #5138d4;
-  --color-brand-700: #422dae;
-  --color-brand-800: #37278a;
-  --color-brand-900: #2e2270;
+  --color-brand-50: #f3f4ff;
+  --color-brand-100: #e2e3ff;
+  --color-brand-200: #c1c3ff;
+  --color-brand-300: #989bfe;
+  --color-brand-400: #6d72fb;
+  --color-brand-500: #4046f5;
+  --color-brand-600: #2e34e4;
+  --color-brand-700: #2026c0;
+  --color-brand-800: #1d219a;
+  --color-brand-900: #1a1d7e;
 }
 
 :root {

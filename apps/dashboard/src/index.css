@@ -4,26 +4,29 @@
  * Paleta de Bicho — la del panel, no la del comercio.
  *
  * El dashboard es Bicho; la tienda es del comercio (ver apps/shop, que sí lee
- * businesses.brand_primary). Acá los colores son fijos a propósito: el panel
- * muestra el verde de WhatsApp y el celeste de Mercado Pago como marcas ajenas,
- * y si el color propio se les pareciera dejaría de entenderse quién es quién.
- * Por eso el acento es violeta: no se confunde con ninguna de las dos.
+ * businesses.brand_primary). Acá los colores son fijos a propósito: es la
+ * identidad de la marca, no algo que cada comercio pueda pisar.
+ *
+ * brand-500 es el #4046f5 de la marca tal cual; el resto de la escala se
+ * generó a partir de ese tono (misma escala HSL que la violeta anterior) para
+ * mantener el contraste. No se confunde con el verde de WhatsApp ni el
+ * celeste de Mercado Pago, que también aparecen en pantalla como marcas ajenas.
  *
  * Contraste verificado contra blanco:
- *   brand-600  7.3:1  → botones primarios y texto sobre relleno (AAA)
- *   brand-500  5.9:1  → acentos, íconos, bordes activos (AA)
+ *   brand-600  7.7:1  → botones primarios y texto sobre relleno (AAA)
+ *   brand-500  6.1:1  → acentos, íconos, bordes activos (AA)
  * ========================================================================== */
 @theme {
-  --color-brand-50: #f1eefe;
-  --color-brand-100: #e4defd;
-  --color-brand-200: #cbbffb;
-  --color-brand-300: #ac99f7;
-  --color-brand-400: #8b71f1;
-  --color-brand-500: #6247e8;
-  --color-brand-600: #5138d4;
-  --color-brand-700: #422dae;
-  --color-brand-800: #37278a;
-  --color-brand-900: #2e2270;
+  --color-brand-50: #f3f4ff;
+  --color-brand-100: #e2e3ff;
+  --color-brand-200: #c1c3ff;
+  --color-brand-300: #989bfe;
+  --color-brand-400: #6d72fb;
+  --color-brand-500: #4046f5;
+  --color-brand-600: #2e34e4;
+  --color-brand-700: #2026c0;
+  --color-brand-800: #1d219a;
+  --color-brand-900: #1a1d7e;
 }
 
 :root {

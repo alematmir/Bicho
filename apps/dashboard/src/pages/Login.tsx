@@ -30,7 +30,7 @@ export function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-center text-2xl font-semibold text-neutral-900">Bicho</h1>
+        <img src="/logo.svg" alt="Bicho" className="mx-auto h-8 w-auto" />
         <p className="mt-1 text-center text-sm text-neutral-500">Panel del comercio</p>
 
         <div className="mt-8 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
