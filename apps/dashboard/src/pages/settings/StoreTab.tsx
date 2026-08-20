@@ -1,10 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useBusiness } from '../../state/business';
 import { supabase } from '../../lib/supabase';
-import { downloadJson, exportBusinessData } from '../../lib/exportData';
+import {
+  downloadJson,
+  downloadStoredBackup,
+  exportBusinessData,
+  fetchStoredBackups,
+  type StoredBackup,
+} from '../../lib/exportData';
 import { Button, Card, Input, LoadingState } from '../../components/ui';
 
 const SHOP_BASE_URL = import.meta.env.VITE_SHOP_BASE_URL ?? '';
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatBackupDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 
 export function StoreTab() {
   const { current, refetch } = useBusiness();
@@ -25,6 +41,11 @@ export function StoreTab() {
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const [backups, setBackups] = useState<StoredBackup[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(true);
+  const [backupsError, setBackupsError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!current) return;
@@ -53,6 +74,16 @@ export function StoreTab() {
   }, [current?.business_id]);
 
   const isOwner = current?.role === 'owner';
+
+  useEffect(() => {
+    if (!current || current.role !== 'owner') return;
+    setBackupsLoading(true);
+    setBackupsError(null);
+    fetchStoredBackups(current.business_id)
+      .then(setBackups)
+      .catch((err) => setBackupsError(err instanceof Error ? err.message : 'No se pudieron cargar los backups.'))
+      .finally(() => setBackupsLoading(false));
+  }, [current?.business_id, current?.role]);
 
   async function handleSave() {
     if (!current) return;
@@ -102,6 +133,20 @@ export function StoreTab() {
       setExportError(err instanceof Error ? err.message : 'No se pudo generar el backup.');
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleDownloadBackup(backup: StoredBackup) {
+    if (!current) return;
+    setDownloadingId(backup.id);
+    setBackupsError(null);
+    try {
+      const date = backup.created_at.slice(0, 10);
+      await downloadStoredBackup(backup.storage_path, `${current.slug}-backup-${date}.json`);
+    } catch (err) {
+      setBackupsError(err instanceof Error ? err.message : 'No se pudo descargar ese backup.');
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -226,6 +271,48 @@ export function StoreTab() {
             >
               Descargar todo
             </Button>
+          </div>
+
+          <div className="mt-5 border-t border-neutral-100 pt-4">
+            <p className="text-xs font-medium text-neutral-500">
+              Backups automáticos (todos los sábados)
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-400">
+              Además del botón de arriba, guardamos una copia como esta todos los sábados. Se
+              conservan las últimas 8 (dos meses).
+            </p>
+
+            {backupsError && <p className="mt-2 text-sm text-red-600">{backupsError}</p>}
+
+            {backupsLoading ? (
+              <div className="mt-3">
+                <LoadingState />
+              </div>
+            ) : backups.length === 0 ? (
+              <p className="mt-3 text-sm text-neutral-400">
+                Todavía no se generó ninguno. El primero sale el próximo sábado.
+              </p>
+            ) : (
+              <ul className="mt-3 divide-y divide-neutral-100">
+                {backups.map((b) => (
+                  <li key={b.id} className="flex items-center justify-between py-2">
+                    <div>
+                      <p className="text-sm text-neutral-700">{formatBackupDate(b.created_at)}</p>
+                      <p className="text-xs text-neutral-400">{formatSize(b.size_bytes)}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadBackup(b)}
+                      loading={downloadingId === b.id}
+                      loadingText="Bajando..."
+                    >
+                      Descargar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </Card>
       )}

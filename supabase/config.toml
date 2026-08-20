@@ -507,3 +507,9 @@ enabled = true
 verify_jwt = false
 import_map = "./functions/export-business-data/deno.json"
 entrypoint = "./functions/export-business-data/index.ts"
+
+[functions.run-scheduled-backups]
+enabled = true
+verify_jwt = false
+import_map = "./functions/run-scheduled-backups/deno.json"
+entrypoint = "./functions/run-scheduled-backups/index.ts"
