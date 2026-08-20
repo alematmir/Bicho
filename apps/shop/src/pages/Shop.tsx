@@ -147,15 +147,29 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
           )}
           <div>
             <h1 className="text-xl font-semibold text-neutral-900">{state.business.name}</h1>
-            <p className="text-sm text-neutral-500">{state.branch.name}</p>
+            {/* El nombre de sucursal es ruido con una sola sucursal ("Principal"
+                no le dice nada al cliente) — mismo criterio que en Checkout.tsx:
+                es un dato, no algo para mostrar, salvo que haya más de una. */}
+            {state.branches.length > 1 && (
+              <p className="text-sm text-neutral-500">{state.branch.name}</p>
+            )}
           </div>
         </div>
 
         <div className="mt-4 flex items-center gap-2">
           <div className="relative flex-1">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
-              🔍
-            </span>
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
