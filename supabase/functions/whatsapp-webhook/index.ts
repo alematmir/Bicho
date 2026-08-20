@@ -22,7 +22,7 @@ import {
   decide, isConversationStale, type Action, type ConversationContext,
   type ConversationEnv, type ConversationState, type InboundEvent,
 } from "../../../packages/shared/src/conversation.ts";
-import { templateKeyFor } from "../../../packages/shared/src/orders.ts";
+import { isTerminal, templateKeyFor } from "../../../packages/shared/src/orders.ts";
 import {
   downloadMedia, fillTemplate, getTemplate, sendButtons, sendList, sendText,
 } from "../_shared/whatsapp.ts";
@@ -471,13 +471,24 @@ async function handleIncoming(req: Request): Promise<Response> {
         context = reset.nextContext;
       };
 
-      // Un pedido en estado terminal (entregado o cancelado) cierra el hilo
-      // que lo venía siguiendo. No alcanza con borrar `activeOrderId` del
-      // contexto: si la conversación se queda en LINK_SENT, un "hola" cae en
-      // esa rama y solo reenvía el link viejo en silencio — el cliente lo lee
-      // como si nada hubiera pasado, en vez de recibir un saludo de cero. La
-      // máquina en sí (decide()) no consulta la base — este chequeo vive acá,
-      // del lado de quien sí puede.
+      // Un pedido en estado terminal (isTerminal(), packages/shared/src/orders.ts
+      // — DELIVERED de pickup, DELIVERY_CONFIRMED de delivery, o CANCELLED)
+      // cierra el hilo que lo venía siguiendo. No alcanza con borrar
+      // `activeOrderId` del contexto: si la conversación se queda en
+      // LINK_SENT, un "hola" cae en esa rama y solo reenvía el link viejo en
+      // silencio — el cliente lo lee como si nada hubiera pasado, en vez de
+      // recibir un saludo de cero. La máquina en sí (decide()) no consulta la
+      // base — este chequeo vive acá, del lado de quien sí puede.
+      //
+      // Iba comparado a mano contra "DELIVERED"/"CANCELLED" nomás — se
+      // desactualizó solo el día que DISPATCHED/DELIVERY_CONFIRMED
+      // reemplazaron a DELIVERED como terminal del camino de delivery
+      // (20260819000700_delivery_confirmation.sql), y durante un rato un
+      // pedido de delivery ya entregado seguía "en curso" para la
+      // conversación: cualquier "hola" días después volvía a mandar el
+      // estado del pedido viejo en vez de un saludo de cero. isTerminal() es
+      // la MISMA función que usa el dashboard — un solo lugar que decide qué
+      // es terminal, no dos copias que puedan volver a desincronizarse.
       //
       // La misma consulta resuelve si hay que esperar un comprobante: un
       // pedido por transferencia que todavía no tiene foto es, ni más ni
@@ -486,7 +497,7 @@ async function handleIncoming(req: Request): Promise<Response> {
       if (context.activeOrderId) {
         const { data: activeOrder } = await supabaseAdmin
           .from("orders").select("status, payment_method").eq("id", context.activeOrderId).maybeSingle();
-        if (!activeOrder || activeOrder.status === "DELIVERED" || activeOrder.status === "CANCELLED") {
+        if (!activeOrder || isTerminal(activeOrder.status)) {
           resetToIdle();
           diag.push({ step: "pedido cerrado → reset", state });
         } else {
