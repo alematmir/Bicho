@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useBusiness } from '../../state/business';
 import { supabase } from '../../lib/supabase';
+import { downloadJson, exportBusinessData } from '../../lib/exportData';
 import { Button, Card, Input, LoadingState } from '../../components/ui';
 
 const SHOP_BASE_URL = import.meta.env.VITE_SHOP_BASE_URL ?? '';
@@ -21,6 +22,9 @@ export function StoreTab() {
   const [transferSaving, setTransferSaving] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSaved, setTransferSaved] = useState(false);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!current) return;
@@ -84,6 +88,21 @@ export function StoreTab() {
     if (error) setTransferError(error.message);
     else setTransferSaved(true);
     setTransferSaving(false);
+  }
+
+  async function handleExport() {
+    if (!current) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const data = await exportBusinessData(current.business_id);
+      const today = new Date().toISOString().slice(0, 10);
+      downloadJson(data, `${current.slug}-backup-${today}.json`);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'No se pudo generar el backup.');
+    } finally {
+      setExporting(false);
+    }
   }
 
   if (!current) return null;
@@ -185,6 +204,31 @@ export function StoreTab() {
           acá, y si cambiara dejarían de funcionar.
         </p>
       </Card>
+
+      {isOwner && (
+        <Card>
+          <p className="text-sm font-medium text-neutral-800">Copia de tus datos</p>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Descarga un archivo con todo lo de tu comercio: catálogo, pedidos, clientes,
+            mensajes de WhatsApp, equipo y configuración de la tienda. No incluye contraseñas
+            ni las credenciales de Mercado Pago o WhatsApp — esas no se pueden exportar.
+          </p>
+
+          {exportError && <p className="mt-2 text-sm text-red-600">{exportError}</p>}
+
+          <div className="mt-3">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExport}
+              loading={exporting}
+              loadingText="Generando..."
+            >
+              Descargar todo
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
