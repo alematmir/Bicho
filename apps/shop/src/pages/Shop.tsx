@@ -4,10 +4,14 @@ import { applyBrand } from '../lib/brand';
 import { fetchCatalog, fetchStorefront, StoreNotFoundError } from '../lib/catalog';
 import type { Branch, Business, Category, Product } from '../lib/types';
 import { ProductCard } from '../components/ProductCard';
+import { ProductCardGrid } from '../components/ProductCardGrid';
 import { ProductOptionsSheet } from '../components/ProductOptionsSheet';
 import { CartBar } from '../components/CartBar';
 import { CartSheet } from '../components/CartSheet';
 import { CartProvider, useCart } from '../state/cart';
+
+type View = 'cards' | 'list';
+const VIEW_STORAGE_KEY = 'bicho:shop:view';
 
 type LoadState =
   | { status: 'loading' }
@@ -79,6 +83,15 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
   const { addItem } = useCart();
   const [pickingProduct, setPickingProduct] = useState<Product | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState<View>(
+    () => (localStorage.getItem(VIEW_STORAGE_KEY) as View) || 'cards',
+  );
+
+  function changeView(next: View) {
+    setView(next);
+    localStorage.setItem(VIEW_STORAGE_KEY, next);
+  }
 
   const productsByCategory = useMemo(() => {
     const map = new Map<string, Product[]>();
@@ -89,6 +102,34 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
     }
     return map;
   }, [state.products]);
+
+  // Buscar tiene prioridad sobre las categorías, igual que en el panel del
+  // dueño (Products.tsx): con texto cargado, importa encontrar el producto,
+  // no en qué rubro está.
+  const searching = search.trim().length > 0;
+  const found = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return state.products.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q),
+    );
+  }, [state.products, search]);
+
+  function renderProducts(products: Product[]) {
+    return view === 'cards' ? (
+      <div className="grid grid-cols-2 gap-3">
+        {products.map((product) => (
+          <ProductCardGrid key={product.id} product={product} onOpenOptions={setPickingProduct} />
+        ))}
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {products.map((product) => (
+          <ProductCard key={product.id} product={product} onOpenOptions={setPickingProduct} />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-lg pb-28">
@@ -109,25 +150,66 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
             <p className="text-sm text-neutral-500">{state.branch.name}</p>
           </div>
         </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
+              🔍
+            </span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar"
+              className="w-full rounded-full border border-neutral-200 bg-neutral-50 py-2.5 pl-9 pr-3 text-sm outline-none focus:border-brand"
+            />
+          </div>
+
+          <div className="flex shrink-0 rounded-full border border-neutral-200 p-0.5">
+            <button
+              onClick={() => changeView('cards')}
+              aria-label="Ver en tarjetas"
+              className={`rounded-full px-2.5 py-1.5 text-sm ${
+                view === 'cards' ? 'bg-neutral-900 text-white' : 'text-neutral-500'
+              }`}
+            >
+              ▦
+            </button>
+            <button
+              onClick={() => changeView('list')}
+              aria-label="Ver en lista"
+              className={`rounded-full px-2.5 py-1.5 text-sm ${
+                view === 'list' ? 'bg-neutral-900 text-white' : 'text-neutral-500'
+              }`}
+            >
+              ☰
+            </button>
+          </div>
+        </div>
       </header>
 
       <main className="space-y-6 p-4">
-        {state.categories.map((category) => {
-          const products = productsByCategory.get(category.id) ?? [];
-          if (products.length === 0) return null;
-          return (
-            <section key={category.id}>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
-                {category.name}
-              </h2>
-              <div className="space-y-3">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} onOpenOptions={setPickingProduct} />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+        {searching ? (
+          found.length === 0 ? (
+            <p className="py-8 text-center text-sm text-neutral-400">
+              No encontramos nada con "{search.trim()}"
+            </p>
+          ) : (
+            renderProducts(found)
+          )
+        ) : (
+          state.categories.map((category) => {
+            const products = productsByCategory.get(category.id) ?? [];
+            if (products.length === 0) return null;
+            return (
+              <section key={category.id}>
+                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-neutral-500">
+                  {category.name}
+                </h2>
+                {renderProducts(products)}
+              </section>
+            );
+          })
+        )}
       </main>
 
       <CartBar onOpen={() => setCartOpen(true)} />

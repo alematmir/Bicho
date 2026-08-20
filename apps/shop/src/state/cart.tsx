@@ -142,3 +142,19 @@ export function useCart(): CartContextValue {
   if (!ctx) throw new Error('useCart() tiene que usarse dentro de <CartProvider>');
   return ctx;
 }
+
+/**
+ * Cuánto de este producto hay en el carrito ahora mismo, en la forma que
+ * necesitan las tarjetas (grid o lista) para decidir qué mostrar: el botón
+ * "Agregar" o el stepper. Centralizado acá porque las dos tarjetas de
+ * producto (ProductCard y ProductCardGrid) necesitan exactamente lo mismo.
+ */
+export function useProductCartState(product: Pick<Product, 'id' | 'option_groups'>) {
+  const { lines } = useCart();
+  const hasOptions = product.option_groups.length > 0;
+  const simpleLine = hasOptions ? undefined : lines.find((l) => l.key === `${product.id}::`);
+  const totalQtyInCart = hasOptions
+    ? lines.filter((l) => l.product_id === product.id).reduce((s, l) => s + l.qty, 0)
+    : 0;
+  return { hasOptions, simpleLine, totalQtyInCart };
+}

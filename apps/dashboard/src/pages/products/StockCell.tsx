@@ -80,7 +80,10 @@ export function StockCell({
         onBlur={() => value !== (product.quantity ?? 0) && save(value)}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
         aria-label={`Unidades de ${product.name}`}
-        className="w-14 rounded-lg border border-neutral-300 px-1.5 py-1 text-center text-sm outline-none focus:border-brand-500"
+        // Sin flechitas del navegador: ya están el − y el + de al lado: las
+        // nativas duplican la función y ocupan un lugar que el campo necesita
+        // para el número escrito a mano.
+        className="w-14 appearance-none rounded-lg border border-neutral-300 px-1.5 py-1 text-center text-sm outline-none [-moz-appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none focus:border-brand-500"
       />
 
       <button

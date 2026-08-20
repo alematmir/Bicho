@@ -4,6 +4,7 @@ import { tryToE164 } from '@bicho/shared';
 import { applyBrand } from '../lib/brand';
 import { fetchDeliveryZones, fetchStorefront } from '../lib/catalog';
 import type { Branch, Business, DeliveryZone } from '../lib/types';
+import { loadSavedCustomer, saveCustomer } from '../lib/savedCustomer';
 import { CartProvider, useCart } from '../state/cart';
 import { Money } from '../components/Money';
 import { createOrder, CreateOrderError } from '../lib/orders';
@@ -52,15 +53,26 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
   // elige y nunca le llega ningún dato). Ver docs/00-arquitectura.md §7.3.
   const acceptsTransfer = Boolean(business.transfer_alias || business.transfer_cbu);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('mercadopago');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [street, setStreet] = useState('');
-  const [number, setNumber] = useState('');
-  const [floorApt, setFloorApt] = useState('');
-  const [notes, setNotes] = useState('');
+
+  // Nombre, teléfono y dirección arrancan con lo que este cliente ya cargó la
+  // última vez en ESTE comercio (ver lib/savedCustomer.ts) — sin esto, cada
+  // pedido nuevo obliga a volver a tipear la dirección entera. El valor
+  // inicial de useState solo se usa una vez, al montar, así que da igual que
+  // loadSavedCustomer() se recalcule en cada render.
+  const saved = loadSavedCustomer(business.slug);
+  const [name, setName] = useState(saved.name);
+  const [phone, setPhone] = useState(saved.phone);
+  const [street, setStreet] = useState(saved.street);
+  const [number, setNumber] = useState(saved.number);
+  const [floorApt, setFloorApt] = useState(saved.floorApt);
+  const [notes, setNotes] = useState(saved.notes);
   const [customerNotes, setCustomerNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  useEffect(() => {
+    saveCustomer(business.slug, { name, phone, street, number, floorApt, notes });
+  }, [business.slug, name, phone, street, number, floorApt, notes]);
 
   // Zonas de envío: sin ninguna cargada, se sigue usando el envío estándar de
   // la sucursal (comportamiento de siempre). Con una sola, no hay nada que

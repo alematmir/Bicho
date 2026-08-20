@@ -1,5 +1,5 @@
 import type { Product } from '../lib/types';
-import { useCart } from '../state/cart';
+import { useCart, useProductCartState } from '../state/cart';
 import { Money } from './Money';
 
 /**
@@ -21,13 +21,8 @@ export function ProductCard({
   product: Product;
   onOpenOptions: (product: Product) => void;
 }) {
-  const { lines, addItem, setQty } = useCart();
-
-  const hasOptions = product.option_groups.length > 0;
-  const simpleLine = hasOptions ? undefined : lines.find((l) => l.key === `${product.id}::`);
-  const totalQtyInCart = hasOptions
-    ? lines.filter((l) => l.product_id === product.id).reduce((s, l) => s + l.qty, 0)
-    : 0;
+  const { addItem, setQty } = useCart();
+  const { hasOptions, simpleLine, totalQtyInCart } = useProductCartState(product);
 
   return (
     <div
