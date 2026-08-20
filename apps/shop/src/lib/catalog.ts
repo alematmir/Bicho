@@ -1,6 +1,6 @@
 import { isInStock } from '@bicho/shared';
 import { supabase } from './supabase';
-import type { Branch, Business, Category, Product, ProductOptionGroup } from './types';
+import type { Branch, Business, Category, DeliveryZone, Product, ProductOptionGroup } from './types';
 
 export class StoreNotFoundError extends Error {
   constructor(slug: string) {
@@ -142,6 +142,22 @@ function mapProduct(raw: RawProduct): Product {
     is_available,
     option_groups,
   };
+}
+
+/**
+ * Zonas de envío activas de una sucursal, para el selector del checkout.
+ * Lista vacía = el comercio no las usa, y el checkout se queda con el envío
+ * estándar de la sucursal (branch.delivery_fee_cents).
+ */
+export async function fetchDeliveryZones(branchId: string): Promise<DeliveryZone[]> {
+  const { data, error } = await supabase
+    .from('delivery_zones')
+    .select('id, name, fee_cents, position')
+    .eq('branch_id', branchId)
+    .eq('is_active', true)
+    .order('position');
+  if (error) throw error;
+  return data ?? [];
 }
 
 /** Paso 2: categorías y productos de una sucursal ya elegida. */

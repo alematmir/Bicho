@@ -4,14 +4,16 @@ import { PageHeader, Tabs, type Tab } from '../components/ui';
 import { BrandTab } from './settings/BrandTab';
 import { MessagesTab } from './settings/MessagesTab';
 import { StoreTab } from './settings/StoreTab';
+import { DeliveryTab } from './settings/DeliveryTab';
 import { UsersTab } from './settings/UsersTab';
 
-type TabId = 'marca' | 'mensajes' | 'comercio' | 'usuarios';
+type TabId = 'marca' | 'mensajes' | 'comercio' | 'envio' | 'usuarios';
 
 const TABS: Tab<TabId>[] = [
   { id: 'marca', label: 'Marca' },
   { id: 'mensajes', label: 'Mensajes' },
   { id: 'comercio', label: 'Comercio' },
+  { id: 'envio', label: 'Envío' },
   { id: 'usuarios', label: 'Usuarios' },
 ];
 
@@ -39,13 +41,14 @@ export function Settings() {
       </div>
 
       <div className="mt-6">
-        {!isOwner && active !== 'comercio' ? (
+        {!isOwner && active !== 'comercio' && active !== 'envio' ? (
           <SoloDueño />
         ) : (
           <>
             {active === 'marca' && <BrandTab />}
             {active === 'mensajes' && <MessagesTab />}
             {active === 'comercio' && <StoreTab />}
+            {active === 'envio' && <DeliveryTab />}
             {active === 'usuarios' && <UsersTab />}
           </>
         )}

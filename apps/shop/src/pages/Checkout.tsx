@@ -2,8 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { tryToE164 } from '@bicho/shared';
 import { applyBrand } from '../lib/brand';
-import { fetchStorefront } from '../lib/catalog';
-import type { Branch, Business } from '../lib/types';
+import { fetchDeliveryZones, fetchStorefront } from '../lib/catalog';
+import type { Branch, Business, DeliveryZone } from '../lib/types';
 import { CartProvider, useCart } from '../state/cart';
 import { Money } from '../components/Money';
 import { createOrder, CreateOrderError } from '../lib/orders';
@@ -62,16 +62,40 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Zonas de envío: sin ninguna cargada, se sigue usando el envío estándar de
+  // la sucursal (comportamiento de siempre). Con una sola, no hay nada que
+  // elegir — mismo criterio que la sucursal única (ver Shop.tsx). Con dos o
+  // más, el cliente tiene que elegir la suya antes de poder confirmar.
+  const [zones, setZones] = useState<DeliveryZone[]>([]);
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!branch.accepts_delivery) return;
+    fetchDeliveryZones(branch.id)
+      .then((z) => {
+        setZones(z);
+        if (z.length === 1) setSelectedZoneId(z[0].id);
+      })
+      .catch(() => setZones([]));
+  }, [branch.id, branch.accepts_delivery]);
+
   useEffect(() => {
     // Si entran acá con el carrito vacío (F5, link directo), no hay nada que
     // cobrar: de vuelta a elegir productos.
     if (lines.length === 0) navigate(`/${business.slug}`, { replace: true });
   }, [lines.length, navigate, business.slug]);
 
-  const deliveryFee = fulfillment === 'delivery' ? branch.delivery_fee_cents : 0;
+  const selectedZone = zones.find((z) => z.id === selectedZoneId) ?? null;
+  const deliveryFee =
+    fulfillment !== 'delivery'
+      ? 0
+      : zones.length > 0
+        ? (selectedZone?.fee_cents ?? 0)
+        : branch.delivery_fee_cents;
   const total = subtotalCents + deliveryFee;
   const belowMinimum =
     fulfillment === 'delivery' && subtotalCents < branch.min_order_cents;
+  const missingZone = fulfillment === 'delivery' && zones.length > 0 && !selectedZoneId;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,6 +108,10 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
     }
     if (fulfillment === 'delivery' && (!street.trim() || !number.trim())) {
       setFormError('Completá la dirección de entrega.');
+      return;
+    }
+    if (missingZone) {
+      setFormError('Elegí tu zona de envío.');
       return;
     }
     if (belowMinimum) {
@@ -104,6 +132,7 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
           fulfillment === 'delivery'
             ? { street: street.trim(), number: number.trim(), floor_apt: floorApt.trim() || undefined, notes: notes.trim() || undefined }
             : undefined,
+        delivery_zone_id: fulfillment === 'delivery' ? selectedZoneId ?? undefined : undefined,
         items: lines.map((l) => ({
           product_id: l.product_id,
           qty: l.qty,
@@ -184,6 +213,28 @@ function CheckoutForm({ business, branch }: { business: Business; branch: Branch
             </div>
             <Input label="Piso / depto (opcional)" value={floorApt} onChange={setFloorApt} />
             <Input label="Referencias (opcional)" value={notes} onChange={setNotes} />
+
+            {zones.length > 1 && (
+              <div>
+                <p className="mb-1 text-xs text-neutral-500">Zona de envío</p>
+                <div className="space-y-2">
+                  {zones.map((zone) => (
+                    <PaymentOption
+                      key={zone.id}
+                      active={selectedZoneId === zone.id}
+                      onClick={() => setSelectedZoneId(zone.id)}
+                      title={zone.name}
+                      subtitle={`$${(zone.fee_cents / 100).toLocaleString('es-AR')} de envío`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {zones.length === 1 && (
+              <p className="text-xs text-neutral-400">
+                Envío a {zones[0].name}: ${(zones[0].fee_cents / 100).toLocaleString('es-AR')}
+              </p>
+            )}
           </section>
         )}
 

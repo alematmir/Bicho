@@ -15,20 +15,23 @@ export function CategoryGrid({
   categories,
   products,
   onOpen,
+  onEdit,
 }: {
   categories: Category[];
   products: ProductRow[];
   onOpen: (categoryId: string) => void;
+  onEdit: (category: Category) => void;
 }) {
   const groups = categories.map((c) => ({
     id: c.id,
     name: c.name,
     items: products.filter((p) => p.category_id === c.id),
+    category: c as Category | null,
   }));
 
   const loose = products.filter((p) => !p.category_id);
   if (loose.length > 0) {
-    groups.push({ id: UNCATEGORIZED, name: 'Sin categoría', items: loose });
+    groups.push({ id: UNCATEGORIZED, name: 'Sin categoría', items: loose, category: null });
   }
 
   return (
@@ -42,18 +45,36 @@ export function CategoryGrid({
         const value = group.items.reduce((sum, p) => sum + p.price_cents, 0);
 
         return (
-          <button
+          <div
             key={group.id}
+            role="button"
+            tabIndex={0}
             onClick={() => onOpen(group.id)}
-            className="group rounded-2xl border border-neutral-200 bg-white p-4 text-left transition-all hover:border-brand-300 hover:shadow-md"
+            onKeyDown={(e) => e.key === 'Enter' && onOpen(group.id)}
+            className="group cursor-pointer rounded-2xl border border-neutral-200 bg-white p-4 text-left transition-all hover:border-brand-300 hover:shadow-md"
           >
             <div className="flex items-start justify-between gap-2">
               <h3 className="font-semibold uppercase tracking-wide text-neutral-900">
                 {group.name}
               </h3>
-              <span className="text-neutral-300 transition-colors group-hover:text-brand-500">
-                →
-              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                {group.category && (
+                  <button
+                    type="button"
+                    aria-label={`Editar ${group.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(group.category!);
+                    }}
+                    className="rounded-lg p-1 text-neutral-300 hover:bg-neutral-100 hover:text-neutral-600"
+                  >
+                    ✎
+                  </button>
+                )}
+                <span className="text-neutral-300 transition-colors group-hover:text-brand-500">
+                  →
+                </span>
+              </div>
             </div>
 
             <p className="mt-2 text-2xl font-semibold text-neutral-900">
@@ -64,6 +85,11 @@ export function CategoryGrid({
             </p>
 
             <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              {group.category && !group.category.is_active && (
+                <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-medium text-neutral-500">
+                  Oculto
+                </span>
+              )}
               {outOfStock > 0 && (
                 <span className="rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-600">
                   {outOfStock} sin stock
@@ -91,7 +117,7 @@ export function CategoryGrid({
                   ` · promedio ${formatArs(Math.round(value / group.items.length))}`}
               </p>
             )}
-          </button>
+          </div>
         );
       })}
     </div>

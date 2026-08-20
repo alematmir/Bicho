@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type Category = { id: string; name: string; position: number };
+export type Category = { id: string; name: string; position: number; is_active: boolean };
 
 export type ProductRow = {
   id: string;
@@ -34,9 +34,12 @@ export const LOW_STOCK_THRESHOLD = 5;
 // -----------------------------------------------------------------------------
 
 export async function fetchCategories(businessId: string): Promise<Category[]> {
+  // Sin filtrar por is_active a propósito: la gestión necesita ver también
+  // los rubros ocultos, para poder volver a mostrarlos. El que sí filtra es
+  // categories_public_read (la tienda).
   const { data, error } = await supabase
     .from('categories')
-    .select('id, name, position')
+    .select('id, name, position, is_active')
     .eq('business_id', businessId)
     .order('position');
   if (error) throw error;
@@ -47,10 +50,20 @@ export async function createCategory(businessId: string, name: string): Promise<
   const { data, error } = await supabase
     .from('categories')
     .insert({ business_id: businessId, name, position: 999 })
-    .select('id, name, position')
+    .select('id, name, position, is_active')
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function updateCategory(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from('categories').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function setCategoryActive(id: string, is_active: boolean): Promise<void> {
+  const { error } = await supabase.from('categories').update({ is_active }).eq('id', id);
+  if (error) throw error;
 }
 
 /**

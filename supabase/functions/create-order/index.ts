@@ -33,6 +33,8 @@ type Input = {
   fulfillment_type: "delivery" | "pickup";
   customer: { phone: string; name?: string };
   delivery_address?: { street: string; number: string; floor_apt?: string; notes?: string };
+  /** Solo importa cuando la sucursal tiene 2+ zonas cargadas — con 0 o 1 se ignora. */
+  delivery_zone_id?: string;
   items: { product_id: string; variant_id?: string; qty: number; option_ids: string[] }[];
   customer_notes?: string;
   payment_method: PaymentMethod;
@@ -147,6 +149,34 @@ Deno.serve(async (req) => {
   if (input.fulfillment_type === "delivery") {
     if (!input.delivery_address?.street || !input.delivery_address?.number) {
       return fail("Falta la dirección de entrega");
+    }
+  }
+
+  // --- Zona de envío -----------------------------------------------------------
+  // El precio de envío nunca sale del carrito: si el comercio cargó zonas, se
+  // recalcula acá a partir de la que eligió el cliente (o la única que hay).
+  // Sin zonas cargadas, se mantiene el comportamiento de siempre: el envío
+  // estándar de la sucursal.
+  let deliveryZoneName: string | null = null;
+  let deliveryFeeFromZone: number | null = null;
+
+  if (input.fulfillment_type === "delivery") {
+    const { data: zones } = await supabaseAdmin
+      .from("delivery_zones")
+      .select("id, name, fee_cents")
+      .eq("branch_id", branch.id)
+      .eq("is_active", true)
+      .order("position");
+
+    if (zones && zones.length > 0) {
+      const zone = zones.length === 1
+        ? zones[0]
+        : zones.find((z) => z.id === input.delivery_zone_id);
+
+      if (!zone) return fail("Elegí una zona de envío");
+
+      deliveryZoneName = zone.name;
+      deliveryFeeFromZone = zone.fee_cents;
     }
   }
 
@@ -270,7 +300,9 @@ Deno.serve(async (req) => {
   }
 
   const subtotal_cents = orderItems.reduce((s, i) => s + i.total_cents, 0);
-  const delivery_fee_cents = input.fulfillment_type === "delivery" ? branch.delivery_fee_cents : 0;
+  const delivery_fee_cents = input.fulfillment_type === "delivery"
+    ? (deliveryFeeFromZone ?? branch.delivery_fee_cents)
+    : 0;
 
   if (input.fulfillment_type === "delivery" && subtotal_cents < branch.min_order_cents) {
     return fail(`El pedido mínimo para envío es de $${(branch.min_order_cents / 100).toFixed(0)}`);
@@ -292,6 +324,7 @@ Deno.serve(async (req) => {
     p_delivery_fee_cents: delivery_fee_cents,
     p_total_cents: total_cents,
     p_payment_method: input.payment_method,
+    p_delivery_zone_name: deliveryZoneName,
   });
 
   if (error) {

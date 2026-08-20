@@ -80,13 +80,6 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
   const [pickingProduct, setPickingProduct] = useState<Product | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
 
-  function handleSelect(product: Product) {
-    // Un producto sin adicionales se agrega directo con cantidad 1, sin abrir
-    // ninguna pantalla intermedia.
-    if (product.option_groups.length === 0) addItem(product, [], 1);
-    else setPickingProduct(product);
-  }
-
   const productsByCategory = useMemo(() => {
     const map = new Map<string, Product[]>();
     for (const p of state.products) {
@@ -129,7 +122,7 @@ function ShopReady({ state }: { state: Extract<LoadState, { status: 'ready' }> }
               </h2>
               <div className="space-y-3">
                 {products.map((product) => (
-                  <ProductCard key={product.id} product={product} onSelect={handleSelect} />
+                  <ProductCard key={product.id} product={product} onOpenOptions={setPickingProduct} />
                 ))}
               </div>
             </section>

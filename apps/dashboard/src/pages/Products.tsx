@@ -11,6 +11,7 @@ import {
 import { CategoryGrid, UNCATEGORIZED } from './products/CategoryGrid';
 import { ProductTable } from './products/ProductTable';
 import { ProductFormModal } from './products/ProductFormModal';
+import { CategoryFormModal } from './products/CategoryFormModal';
 
 type View = 'rubros' | 'lista';
 
@@ -29,6 +30,7 @@ export function Products() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ProductRow | 'new' | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | 'new' | null>(null);
   const [importing, setImporting] = useState(false);
   const [hiding, setHiding] = useState<ProductRow | null>(null);
   const [search, setSearch] = useState('');
@@ -140,6 +142,9 @@ export function Products() {
             <Button size="sm" onClick={() => setImporting(true)}>
               Importar CSV
             </Button>
+            <Button size="sm" onClick={() => setEditingCategory('new')}>
+              + Rubro
+            </Button>
             <Button size="sm" variant="primary" onClick={() => setEditing('new')}>
               + Nuevo producto
             </Button>
@@ -200,6 +205,7 @@ export function Products() {
             categories={categories}
             products={products}
             onOpen={setOpenCategory}
+            onEdit={setEditingCategory}
           />
         ) : openCategory ? (
           inOpenCategory.length === 0 ? (
@@ -275,6 +281,26 @@ export function Products() {
             load();
           }}
           onCategoryCreated={(c) => setCategories((prev) => [...prev, c])}
+        />
+      )}
+
+      {editingCategory && (
+        <CategoryFormModal
+          businessId={current.business_id}
+          category={editingCategory}
+          productCount={
+            editingCategory === 'new'
+              ? 0
+              : products.filter((p) => p.category_id === editingCategory.id).length
+          }
+          onClose={() => setEditingCategory(null)}
+          onSaved={(saved) => {
+            setCategories((prev) => {
+              const exists = prev.some((c) => c.id === saved.id);
+              return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [...prev, saved];
+            });
+            setEditingCategory(null);
+          }}
         />
       )}
 

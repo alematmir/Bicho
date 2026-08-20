@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { formatArs, parseAmount } from '@bicho/shared';
 import {
   createCategory, createProduct, setTrackQuantity, updateProduct,
   type Category, type ProductInput, type ProductRow,
 } from '../../lib/catalog';
+import { ProductImageError, uploadProductImage } from '../../lib/productImages';
 import {
   BeforeAfter, Button, ConfirmDialog, Input, Modal, Select, Textarea, ToggleField,
 } from '../../components/ui';
@@ -30,12 +31,26 @@ export function ProductFormModal({
   const [price, setPrice] = useState(product ? (product.price_cents / 100).toString() : '');
   const [categoryId, setCategoryId] = useState(product?.category_id ?? categories[0]?.id ?? '');
   const [imageUrl, setImageUrl] = useState(product?.image_url ?? '');
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [trackQuantity, setTrack] = useState(product?.track_quantity ?? false);
   const [quantity, setQuantity] = useState((product?.quantity ?? 0).toString());
   const [newCategoryName, setNewCategoryName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingPrice, setConfirmingPrice] = useState<number | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function handleImageUpload(file: File) {
+    setError(null);
+    setUploadingImage(true);
+    try {
+      setImageUrl(await uploadProductImage(businessId, file));
+    } catch (err) {
+      setError(err instanceof ProductImageError ? err.message : (err as Error).message);
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   async function handleAddCategory() {
     const trimmed = newCategoryName.trim();
@@ -123,7 +138,7 @@ export function ProductFormModal({
               onClick={() => handleSubmit(new Event('submit') as unknown as React.FormEvent)}
               loading={saving}
               loadingText="Guardando..."
-              disabled={!name.trim() || !price.trim()}
+              disabled={!name.trim() || !price.trim() || uploadingImage}
             >
               {product ? 'Guardar cambios' : 'Crear producto'}
             </Button>
@@ -193,12 +208,45 @@ export function ProductFormModal({
             </div>
           </div>
 
-          <Input
-            label="URL de imagen (opcional)"
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            placeholder="https://..."
-          />
+          <div>
+            <span className="mb-1 block text-xs font-medium text-neutral-500">Foto (opcional)</span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50">
+                {imageUrl ? (
+                  <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-[10px] text-neutral-400">Sin foto</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => fileInput.current?.click()}
+                  loading={uploadingImage}
+                  loadingText="Subiendo..."
+                >
+                  {imageUrl ? 'Cambiar foto' : 'Subir foto'}
+                </Button>
+                {imageUrl && (
+                  <Button type="button" size="sm" variant="danger" onClick={() => setImageUrl('')}>
+                    Quitar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
 
           <div className="rounded-xl border border-neutral-200 p-3">
             <ToggleField

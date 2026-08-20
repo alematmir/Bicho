@@ -36,6 +36,14 @@ export type Category = {
   position: number;
 };
 
+/** Zona de envío que cargó el dueño, con su propio precio. */
+export type DeliveryZone = {
+  id: string;
+  name: string;
+  fee_cents: number;
+  position: number;
+};
+
 export type ProductOption = {
   id: string;
   name: string;

@@ -11,6 +11,8 @@ export type CreateOrderInput = {
     floor_apt?: string;
     notes?: string;
   };
+  /** Solo hace falta cuando la sucursal tiene 2+ zonas de envío cargadas. */
+  delivery_zone_id?: string;
   /**
    * Deliberadamente SIN precios. La Edge Function recalcula todo desde la base
    * — es la regla "precios server-authoritative" de docs/00-arquitectura.md.
