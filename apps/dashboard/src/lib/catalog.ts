@@ -158,6 +158,18 @@ export async function setProductActive(id: string, is_active: boolean): Promise<
   if (error) throw error;
 }
 
+/**
+ * Borra el producto de verdad — a diferencia de setProductActive, esto no se
+ * deshace. inventory/product_variants/product_option_groups caen con él
+ * (on delete cascade); los pedidos ya hechos no se tocan, porque order_items
+ * guarda su propio name_snapshot y solo pierde la referencia (on delete set
+ * null) — el historial de ventas queda intacto.
+ */
+export async function deleteProduct(id: string): Promise<void> {
+  const { error } = await supabase.from('products').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function setStockAvailable(
   businessId: string,
   branchId: string,

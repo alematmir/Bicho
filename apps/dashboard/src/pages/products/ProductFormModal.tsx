@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { formatArs, parseAmount } from '@bicho/shared';
 import {
-  createCategory, createProduct, setTrackQuantity, updateProduct,
+  createCategory, createProduct, deleteProduct, setTrackQuantity, updateProduct,
   type Category, type ProductInput, type ProductRow,
 } from '../../lib/catalog';
 import { ProductImageError, uploadProductImage } from '../../lib/productImages';
@@ -38,6 +38,8 @@ export function ProductFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingPrice, setConfirmingPrice] = useState<number | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   async function handleImageUpload(file: File) {
@@ -123,26 +125,53 @@ export function ProductFormModal({
     }
   }
 
+  async function handleDelete() {
+    if (!product) return;
+    setDeleting(true);
+    try {
+      await deleteProduct(product.id);
+      onSaved();
+    } catch (err) {
+      setError((err as Error).message);
+      setDeleting(false);
+      throw err; // el ConfirmDialog necesita el rechazo para no cerrarse solo.
+    }
+  }
+
   return (
     <>
       <Modal
         title={product ? 'Editar producto' : 'Nuevo producto'}
         onClose={onClose}
         footer={
-          <>
-            <Button variant="ghost" onClick={onClose} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => handleSubmit(new Event('submit') as unknown as React.FormEvent)}
-              loading={saving}
-              loadingText="Guardando..."
-              disabled={!name.trim() || !price.trim() || uploadingImage}
-            >
-              {product ? 'Guardar cambios' : 'Crear producto'}
-            </Button>
-          </>
+          <div className="flex w-full items-center justify-between">
+            {product ? (
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => setConfirmingDelete(true)}
+                disabled={saving}
+              >
+                Eliminar producto
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={onClose} disabled={saving}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => handleSubmit(new Event('submit') as unknown as React.FormEvent)}
+                loading={saving}
+                loadingText="Guardando..."
+                disabled={!name.trim() || !price.trim() || uploadingImage}
+              >
+                {product ? 'Guardar cambios' : 'Crear producto'}
+              </Button>
+            </div>
+          </div>
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -303,6 +332,21 @@ export function ProductFormModal({
             before={formatArs(product.price_cents)}
             after={formatArs(confirmingPrice)}
           />
+        </ConfirmDialog>
+      )}
+
+      {confirmingDelete && product && (
+        <ConfirmDialog
+          title={`Eliminar ${product.name}`}
+          message="No se puede deshacer. El producto desaparece de la tienda y de la gestión."
+          confirmLabel={deleting ? 'Eliminando...' : 'Sí, eliminar'}
+          onConfirm={handleDelete}
+          onClose={() => setConfirmingDelete(false)}
+        >
+          <p className="text-neutral-500">
+            Si preferís no perderlo del todo, cerrá esto y usá "Mostrar en la tienda" para
+            ocultarlo en cambio — queda guardado con su precio y su stock.
+          </p>
         </ConfirmDialog>
       )}
     </>
