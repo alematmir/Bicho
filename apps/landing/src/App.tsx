@@ -281,7 +281,7 @@ function Footer() {
         </div>
 
         <div className="mt-10 border-t border-neutral-100 pt-6 text-sm text-neutral-400">
-          © {new Date().getFullYear()} Bicho. Hecho en Argentina.
+          © {new Date().getFullYear()} Maturano Jose Alejandro · Bicho · Hecho en Argentina.
         </div>
       </div>
     </footer>
