@@ -1,4 +1,4 @@
-import { Bell, CreditCard, LayoutGrid, LayoutTemplate, Package, ShoppingCart, Smartphone } from 'lucide-react'
+import { Bell, CreditCard, LayoutGrid, Package, ShoppingCart, Smartphone } from 'lucide-react'
 import { BichoEyes } from './components/BichoEyes'
 import { CtaButton } from './components/CtaButton'
 import { InteractiveHoverButton } from './components/InteractiveHoverButton'
@@ -220,8 +220,9 @@ function Producto() {
 }
 
 /**
- * TODO: cambiar por capturas reales del dashboard cuando estén listas.
- * Mientras tanto, un placeholder que se ve intencional, no roto.
+ * Captura real del tablero de pedidos (comercio de prueba, datos ficticios).
+ * TODO: sumar una o dos capturas más (Productos, por ejemplo) cuando haya
+ * tiempo de armar la variedad de datos para esas pantallas también.
  */
 function ScreenshotPlaceholder() {
   return (
@@ -231,10 +232,11 @@ function ScreenshotPlaceholder() {
         <span className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
         <span className="h-2.5 w-2.5 rounded-full bg-neutral-200" />
       </div>
-      <div className="flex flex-col items-center justify-center gap-3 px-6 py-24 text-center">
-        <LayoutTemplate className="h-8 w-8 text-neutral-300" strokeWidth={1.5} />
-        <p className="text-sm text-neutral-400">Capturas del panel — en camino</p>
-      </div>
+      <img
+        src="/screenshots/orders-board.png"
+        alt="Tablero de pedidos de Bicho, con pedidos organizados por estado"
+        className="w-full"
+      />
     </div>
   )
 }
