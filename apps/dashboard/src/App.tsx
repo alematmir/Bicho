@@ -161,10 +161,17 @@ function Shell() {
   return (
     <NotificationsProvider>
       <WaitingProvider>
-        <div className="flex">
+        {/* h-screen (no min-h-screen) en los dos niveles: así el layout entero
+            queda EXACTO a la altura de la ventana y nunca crece más que eso.
+            Con min-h-screen, apenas el contenido de <main> pasaba esa altura
+            (pantallas chicas, como una Mac de 13"), este div crecía con él y
+            terminaba scrolleando el DOCUMENTO entero en vez de solo <main> —
+            arrastrando al Sidebar con el scroll, que es lo que no tendría que
+            pasar nunca (el Sidebar es su propio panel fijo). */}
+        <div className="flex h-screen overflow-hidden">
           <Sidebar />
 
-          <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+          <div className="flex h-screen min-w-0 flex-1 flex-col">
             {/* `justify-end`: sin el botón de menú (vive adentro del propio
                 Sidebar ahora), no hay riesgo de que un hijo único se pegue a
                 la izquierda con `ml-auto` de más. */}
