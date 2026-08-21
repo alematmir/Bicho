@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* =============================================================================
+ * Paleta de Bicho — la misma escala que apps/dashboard/src/index.css.
+ *
+ * brand-500 es el #4046f5 de la marca tal cual; el resto de la escala se
+ * generó a partir de ese tono para mantener el contraste. Se duplica acá (en
+ * vez de compartirla desde @bicho/shared) porque es identidad visual fija,
+ * no lógica de negocio — y esta app no necesita el resto del paquete.
+ *
+ * Contraste verificado contra blanco:
+ *   brand-600  7.7:1  → botones primarios y texto sobre relleno (AAA)
+ *   brand-500  6.1:1  → acentos, íconos, bordes activos (AA)
+ * ========================================================================== */
+@theme {
+  --color-brand-50: #f3f4ff;
+  --color-brand-100: #e2e3ff;
+  --color-brand-200: #c1c3ff;
+  --color-brand-300: #989bfe;
+  --color-brand-400: #6d72fb;
+  --color-brand-500: #4046f5;
+  --color-brand-600: #2e34e4;
+  --color-brand-700: #2026c0;
+  --color-brand-800: #1d219a;
+  --color-brand-900: #1a1d7e;
+
+  /* Plus Jakarta Sans: la elegimos porque se parece a Zona Pro (la tipografía
+     del isotipo/wordmark de Bicho) y está en Google Fonts, sin licencia que
+     pagar para usarla en el sitio. */
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* Tokens que usa InteractiveHoverButton (bg-background, bg-primary,
+     text-primary-foreground): nombres shadcn de costumbre, valores de Bicho. */
+  --color-background: #ffffff;
+  --color-primary: var(--color-brand-600);
+  --color-primary-foreground: #ffffff;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-white text-neutral-900 antialiased;
+  font-family: var(--font-display);
+  overflow-x: hidden;
+}
+
+@layer base {
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@keyframes bicho-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bicho-float {
+  animation: bicho-float 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bicho-float {
+    animation: none;
+  }
+}

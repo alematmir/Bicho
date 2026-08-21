@@ -9,7 +9,8 @@
     "dev:shop": "npm run dev --workspace=shop",
     "dev:dashboard": "npm run dev --workspace=dashboard",
     "dev:admin": "npm run dev --workspace=admin",
-    "dev:delivery": "npm run dev --workspace=delivery"
+    "dev:delivery": "npm run dev --workspace=delivery",
+    "dev:landing": "npm run dev --workspace=landing"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.5",
