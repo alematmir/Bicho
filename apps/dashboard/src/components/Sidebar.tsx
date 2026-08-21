@@ -67,9 +67,13 @@ export function Sidebar() {
   }
 
   return (
+    /* Sin transición de ancho: animar `width` fuerza layout en cada frame, y al
+       lado de <main overflow-y-auto> (App.tsx) es lo que dejaba restos de
+       pantalla pegados al scrollear — mismo bug de composición de Chrome que
+       el header, pero disparado por esto y no por el backdrop-blur que se
+       sacó ahí. El plegado ahora es instantáneo en vez de animado. */
     <aside
-      className={`flex h-screen shrink-0 flex-col border-r border-neutral-200 bg-white
-        transition-[width] duration-200 ease-out ${collapsed ? 'w-[76px]' : 'w-64'}`}
+      className={`flex h-screen shrink-0 flex-col border-r border-neutral-200 bg-white ${collapsed ? 'w-[76px]' : 'w-64'}`}
     >
       {/* Colapsado, la cabecera es SOLO el botón de desplegar, centrado.
           Desplegado, y con un solo comercio (el caso común), es SOLO el
