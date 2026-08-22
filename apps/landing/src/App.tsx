@@ -37,12 +37,12 @@ const SKILLS = [
   {
     icon: ShoppingCart,
     title: 'Catálogo y carrito en la web',
-    body: 'Tu cliente elige productos y arma el carrito sin salir de una tienda propia. WhatsApp es la puerta, no el catálogo.',
+    body: 'Tu cliente elige productos y arma el carrito sin salir de tu tienda. WhatsApp es la puerta, no el catálogo.',
   },
   {
     icon: CreditCard,
     title: 'Cobrás en tu propia cuenta',
-    body: 'Los pagos entran directo a tu Mercado Pago. Sin comisión por venta: la plata es tuya, no nuestra.',
+    body: 'Los pagos entran directo a tu cuenta de Mercado Pago. Sin comisión por venta: la plata es tuya, no nuestra.',
   },
   {
     icon: Smartphone,
@@ -168,8 +168,7 @@ function Promise() {
           Nosotros vendemos por vos.
         </p>
         <p className="mt-4 text-balance text-brand-100">
-          Catálogo, cobro y aviso al cliente: los resolvemos nosotros. Vos, a armar y
-          entregar el pedido.
+          Catálogo, cobro y aviso al cliente: lo resolvemos nosotros. Vos, solo tenés que armar y entregar el pedido.
         </p>
       </div>
     </section>
