@@ -146,7 +146,7 @@ function Hero() {
         <span className="text-brand-600">sin comisiones</span> y sin perder tu número
       </h1>
 
-      <p className="mt-5 max-w-xl text-balance text-lg text-neutral-500">
+      <p className="mt-5 max-w-xl text-balance font-medium text-lg text-neutral-500">
         Se acabó anotar pedidos a mano. Bicho arma el catálogo, cobra por Mercado Pago
         y avisa a tu cliente en cada paso — todo automático, con el WhatsApp de siempre.
       </p>
